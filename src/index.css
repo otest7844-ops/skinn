@@ -1,0 +1,256 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Plus Jakarta Sans', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Base theme styling */
+body {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+body[data-theme="dark"] {
+  background-color: #0B0D19;
+  color: #FFFFFF;
+}
+
+body[data-theme="light"] {
+  background-color: #F3F4F9;
+  color: #0F172A;
+}
+
+body[data-theme="lime"] {
+  background-color: #10170b;
+  color: #f7fee7;
+}
+
+body[data-theme="lime"] [class~="bg-[#0B0D19]"] {
+  background-color: #10170b !important;
+}
+
+body[data-theme="lime"] [class~="bg-[#161928]"] {
+  background-color: #1a2412 !important;
+}
+
+body[data-theme="lime"] [class~="bg-[#6B38FB]"],
+body[data-theme="lime"] [class~="bg-purple-600"] {
+  background-color: #84cc16 !important;
+}
+
+body[data-theme="lime"] [class~="hover:bg-[#5B2AE8]"]:hover {
+  background-color: #65a30d !important;
+}
+
+body[data-theme="lime"] [class~="text-[#8B5CF6]"],
+body[data-theme="lime"] [class~="text-purple-400"],
+body[data-theme="lime"] [class~="text-purple-500"] {
+  color: #a3e635 !important;
+}
+
+body[data-theme="lime"] [class~="border-purple-500/40"],
+body[data-theme="lime"] [class~="border-purple-500/30"] {
+  border-color: rgb(163 230 53 / 0.4) !important;
+}
+
+body[data-theme="lime"] [class~="shadow-purple-600/30"] {
+  --tw-shadow-color: rgb(132 204 22 / 0.3);
+}
+
+/* Custom Utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Glassmorphism effects */
+.glass-pill {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Glow effects */
+.glow-purple {
+  box-shadow: 0 4px 20px -2px rgba(107, 56, 251, 0.45);
+}
+
+.glow-gold {
+  box-shadow: 0 4px 18px -2px rgba(250, 204, 21, 0.35);
+}
+
+/* Animation utilities */
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.92; transform: scale(1.02); }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 3s ease-in-out infinite;
+}
+
+.chicago-intro-logo {
+  animation: chicagoIntroReveal 450ms ease-out both;
+}
+
+.chicago-loading-dot {
+  animation: chicagoLoadingDot 600ms ease-in-out infinite alternate;
+}
+
+@keyframes chicagoIntroReveal {
+  from { opacity: 0; transform: scale(0.82); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes chicagoLoadingDot {
+  from { opacity: 0.35; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(-5px); }
+}
+
+.chicago-world::before,
+.chicago-world::after {
+  position: fixed;
+  inset: -18%;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+}
+
+.chicago-world::before {
+  background:
+    radial-gradient(ellipse at 12% 18%, rgb(124 58 237 / 0.13), transparent 34%),
+    radial-gradient(ellipse at 88% 36%, rgb(236 72 153 / 0.09), transparent 30%),
+    radial-gradient(ellipse at 55% 90%, rgb(234 179 8 / 0.07), transparent 34%);
+  animation: chicagoWorldGlow 12s ease-in-out infinite alternate;
+}
+
+.chicago-world::after {
+  inset: 0;
+  opacity: 0.16;
+  background-image: radial-gradient(circle, rgb(250 204 21 / 0.7) 1px, transparent 1.5px);
+  background-size: 72px 86px;
+  mask-image: linear-gradient(130deg, transparent 10%, #000 48%, transparent 88%);
+  animation: chicagoWorldSparkle 8s linear infinite;
+}
+
+.promotion-carousel {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
+}
+
+.promotion-track {
+  animation: chicagoPromotionScroll 13s linear infinite;
+  will-change: transform;
+}
+
+.promotion-carousel:hover .promotion-track {
+  animation-play-state: paused;
+}
+
+@keyframes chicagoPromotionScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes chicagoWorldGlow {
+  from { transform: translate3d(-1%, -0.5%, 0) scale(1); }
+  to { transform: translate3d(1%, 0.5%, 0) scale(1.05); }
+}
+
+@keyframes chicagoWorldSparkle {
+  from { background-position: 0 0; }
+  to { background-position: 72px -86px; }
+}
+
+.chicago-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chicago-ambient-token {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  filter: drop-shadow(0 0 12px currentColor);
+  animation: chicagoTokenFloat 5s ease-in-out infinite;
+}
+
+.chicago-ambient-coin {
+  width: 38px;
+  height: 38px;
+  border: 2px solid rgb(255 230 130 / 0.9);
+  border-radius: 50%;
+  color: #fff3a6;
+  background: radial-gradient(circle at 30% 25%, #fff8cc, #f8b923 45%, #a95405 100%);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.24), 0 0 22px rgb(250 204 21 / 0.5);
+  font-size: 19px;
+  text-shadow: 0 1px 3px #8a3c00;
+}
+
+.chicago-ambient-diamond {
+  color: #ff65d5;
+  font-size: 34px;
+  text-shadow: 0 0 8px #ff42bd, 0 0 24px rgb(255 48 190 / 0.8);
+}
+
+.chicago-ambient-star {
+  color: #8feaff;
+  font-size: 30px;
+  text-shadow: 0 0 8px #38dfff, 0 0 24px rgb(56 223 255 / 0.8);
+}
+
+.chicago-ambient-one { left: 5%; top: 24%; animation-delay: -1s; }
+.chicago-ambient-two { right: 7%; top: 35%; animation-delay: -3s; }
+.chicago-ambient-three { left: 9%; top: 57%; animation-delay: -2s; }
+.chicago-ambient-four { right: 5%; top: 69%; animation-delay: -4s; }
+.chicago-ambient-five { left: 6%; top: 82%; animation-delay: -0.5s; }
+.chicago-ambient-six { right: 8%; top: 91%; animation-delay: -2.5s; }
+
+@keyframes chicagoTokenFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-8deg) scale(0.9); }
+  50% { transform: translate3d(0, -22px, 0) rotate(12deg) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chicago-world::before,
+  .chicago-world::after,
+  .chicago-ambient-token,
+  .promotion-track,
+  .chicago-intro-logo,
+  .chicago-loading-dot {
+    animation: none;
+  }
+}
+
+/* Custom scroll smooth */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Tap active effects */
+button, a {
+  user-select: none;
+}

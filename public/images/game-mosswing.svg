@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 420">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop stop-color="#f8cca9" />
+      <stop offset=".58" stop-color="#f7dfb8" />
+      <stop offset="1" stop-color="#8da89b" />
+    </linearGradient>
+    <radialGradient id="sun">
+      <stop stop-color="#fff5d1" />
+      <stop offset="1" stop-color="#fff5d1" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="360" height="420" rx="36" fill="url(#sky)" />
+  <circle cx="274" cy="82" r="95" fill="url(#sun)" />
+  <path d="M0 300c58-37 111-26 170 6s124 43 190 0v114H0Z" fill="#6e8d7e" />
+  <path d="M0 336c69-21 118 18 179 28s115-6 181-34v90H0Z" fill="#4f7466" opacity=".8" />
+  <g transform="translate(178 190)">
+    <path d="M-50 9c5-25 34-41 68-30 21 7 28 26 12 41-18 17-64 19-80-11Z" fill="#e88d42" />
+    <path d="M-19-3c-1-42 22-69 45-82 14 31 8 67-16 91" fill="#829b53" stroke="#fff4d9" stroke-width="4" />
+    <path d="M-9-6c8-28 20-47 34-62M-34 7c-17 10-28 14-43 15" fill="none" stroke="#fff4d9" stroke-linecap="round" stroke-width="4" />
+    <circle cx="20" cy="1" r="5" fill="#243e34" />
+    <circle cx="21" cy="0" r="1.5" fill="#fff7dc" />
+  </g>
+  <g fill="#fff4d9" opacity=".8">
+    <circle cx="64" cy="94" r="3" /><circle cx="105" cy="150" r="2" /><circle cx="308" cy="197" r="3" /><circle cx="254" cy="269" r="2" />
+  </g>
+  <text x="180" y="376" fill="#203f34" font-family="Georgia,serif" font-size="32" text-anchor="middle">Mosswing</text>
+</svg>

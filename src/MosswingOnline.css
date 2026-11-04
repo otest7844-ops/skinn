@@ -1,0 +1,898 @@
+.mosswing-online {
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  overflow: hidden;
+  background: #7fdcfa url('/images/memo-sky.svg') center / 100% 100% fixed;
+  color: #f5f2e7;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.mosswing-frame {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+.mosswing-frame.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mosswing-topbar {
+  position: absolute;
+  z-index: 8;
+  top: max(0.7rem, env(safe-area-inset-top));
+  right: max(0.85rem, env(safe-area-inset-right));
+  left: max(0.85rem, env(safe-area-inset-left));
+  display: grid;
+  min-height: 3rem;
+  grid-template-columns: 2.8rem 1fr 5.2rem;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.mosswing-topbar > * {
+  pointer-events: auto;
+}
+
+.mosswing-back {
+  display: grid;
+  width: 2.6rem;
+  height: 2.6rem;
+  place-items: center;
+  border: 1px solid rgba(228, 242, 232, 0.22);
+  border-radius: 50%;
+  background: rgba(15, 29, 26, 0.6);
+  color: #e7f2e8;
+}
+
+.mosswing-wordmark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: #f6f1dc;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.22em;
+}
+
+.mosswing-mark {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: 1px solid rgba(235, 244, 218, 0.4);
+  border-radius: 0.6rem;
+  background: rgba(245, 230, 177, 0.13);
+  color: #f1d99b;
+  font-family: Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.mosswing-connection {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  color: #f3c8a9;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mosswing-connection.is-online {
+  color: #bee6c8;
+}
+
+.mosswing-lobby {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: max(4.5rem, calc(env(safe-area-inset-top) + 3.8rem)) 1rem max(1.5rem, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(ellipse at 50% 25%, rgba(21, 43, 37, 0.36), rgba(11, 20, 18, 0.84)),
+    linear-gradient(180deg, rgba(21, 37, 32, 0.35), rgba(15, 24, 21, 0.84));
+}
+
+.mosswing-panel {
+  width: min(100%, 28rem);
+  border: 1px solid rgba(226, 236, 215, 0.22);
+  border-radius: 1.4rem;
+  background: linear-gradient(145deg, rgba(40, 62, 53, 0.96), rgba(25, 42, 37, 0.97));
+  padding: clamp(1.25rem, 5vw, 2rem);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+.mosswing-home-panel {
+  margin: auto;
+}
+
+.mosswing-panel h1 {
+  margin: 0.35rem 0 0.7rem;
+  color: #faf4df;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.15rem, 9vw, 3.2rem);
+  font-weight: 500;
+  letter-spacing: -0.07em;
+  line-height: 1.05;
+}
+
+.mosswing-panel h1 em {
+  color: #d6c18a;
+  font-size: 0.72em;
+  font-weight: 400;
+}
+
+.mosswing-panel > p {
+  margin: 0 auto 1.4rem;
+  color: #bdcfc0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.mosswing-eyebrow {
+  color: #c8b87d;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.22em;
+}
+
+.mosswing-menu-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.mosswing-name-field {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.8rem;
+  color: #d7ceab;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.mosswing-name-field input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(222, 236, 222, 0.22);
+  border-radius: 0.75rem;
+  background: rgba(10, 23, 18, 0.4);
+  padding: 0.65rem 0.8rem;
+  color: #fff6df;
+  font: inherit;
+}
+
+.mosswing-primary,
+.mosswing-secondary {
+  display: inline-flex;
+  min-height: 2.9rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 0.85rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.87rem;
+  font-weight: 700;
+  transition: transform 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+
+.mosswing-primary {
+  background: #d9c58f;
+  color: #25382f;
+}
+
+.mosswing-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #ead9a7;
+}
+
+.mosswing-secondary {
+  border-color: rgba(222, 236, 222, 0.18);
+  background: rgba(227, 241, 225, 0.07);
+  color: #e6eddf;
+}
+
+.mosswing-secondary:hover:not(:disabled) {
+  border-color: rgba(222, 236, 222, 0.42);
+  background: rgba(227, 241, 225, 0.13);
+}
+
+.mosswing-primary:disabled,
+.mosswing-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.mosswing-utility-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.1rem;
+}
+
+.mosswing-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mosswing-utility-actions button,
+.mosswing-panel-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  background: transparent;
+  color: #c1d0c0;
+  font-size: 0.73rem;
+}
+
+.mosswing-setting {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  border-top: 1px solid rgba(228, 238, 222, 0.12);
+  padding-top: 0.8rem;
+  color: #e8eddf;
+  font-size: 0.82rem;
+}
+
+.mosswing-setting span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.mosswing-setting input {
+  accent-color: #d9c58f;
+}
+
+.mosswing-panel .mosswing-help {
+  margin: 0.9rem 0 0;
+  border-left: 2px solid #d9c58f;
+  padding-left: 0.75rem;
+  color: #c8d4c8;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.mosswing-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 1rem 0 0 !important;
+  color: #c4cfbf !important;
+  font-size: 0.75rem !important;
+}
+
+.mosswing-spin {
+  animation: mosswing-spin 1.1s linear infinite;
+}
+
+.mosswing-feedback {
+  position: fixed;
+  z-index: 9;
+  right: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 1rem;
+  width: fit-content;
+  max-width: min(36rem, calc(100% - 2rem));
+  margin: auto;
+  border: 1px solid rgba(246, 202, 177, 0.32);
+  border-radius: 0.8rem;
+  background: #472f29;
+  padding: 0.7rem 0.9rem;
+  color: #ffe4d5;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.mosswing-panel-back {
+  display: flex;
+  width: fit-content;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+.mosswing-join-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+}
+
+.mosswing-join-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(222, 236, 222, 0.22);
+  border-radius: 0.85rem;
+  background: rgba(10, 23, 18, 0.4);
+  padding: 0.65rem 0.8rem;
+  color: #fff6df;
+  font-size: 1.05rem;
+  font-weight: 750;
+  letter-spacing: 0.15em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.mosswing-room-panel {
+  padding-top: 1.25rem;
+}
+
+.mosswing-room-panel h1 {
+  margin-bottom: 1rem;
+}
+
+.mosswing-room-code {
+  display: flex;
+  width: 100%;
+  min-height: 3.4rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  margin: 0.4rem 0 1.1rem;
+  border: 1px dashed rgba(233, 217, 168, 0.54);
+  border-radius: 0.9rem;
+  background: rgba(216, 197, 143, 0.1);
+  color: #f0dda8;
+}
+
+.mosswing-room-code span {
+  font-size: 1.45rem;
+  font-weight: 850;
+  letter-spacing: 0.25em;
+}
+
+.mosswing-player-slots {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  text-align: left;
+}
+
+.mosswing-player-slot {
+  display: grid;
+  min-height: 3.8rem;
+  grid-template-columns: 2.6rem 1fr 0.55rem;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(227, 238, 224, 0.12);
+  border-radius: 0.85rem;
+  background: rgba(225, 239, 223, 0.04);
+  padding: 0.5rem 0.7rem;
+}
+
+.mosswing-player-avatar {
+  display: grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: rgba(211, 194, 139, 0.16);
+  color: #e5d5a4;
+  font-family: Georgia, serif;
+  font-size: 0.95rem;
+}
+
+.mosswing-player-slot strong,
+.mosswing-player-slot small {
+  display: block;
+}
+
+.mosswing-player-slot strong {
+  color: #f5f2e7;
+  font-size: 0.82rem;
+}
+
+.mosswing-player-slot small {
+  margin-top: 0.18rem;
+  color: #9fb3a4;
+  font-size: 0.68rem;
+}
+
+.mosswing-player-slot > i {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: #7a7f75;
+}
+
+.mosswing-player-slot > i.is-connected {
+  background: #7ddd9d;
+  box-shadow: 0 0 0.6rem rgba(125, 221, 157, 0.65);
+}
+
+.mosswing-ready {
+  width: 100%;
+}
+
+.mosswing-ready.is-ready {
+  border-color: rgba(125, 221, 157, 0.4);
+  background: #37714f;
+  color: #f1fff0;
+}
+
+.mosswing-countdown {
+  display: flex;
+  min-height: 2.9rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0 !important;
+  color: #e0ead9 !important;
+}
+
+.mosswing-countdown span {
+  display: grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  place-items: center;
+  border: 1px solid rgba(232, 216, 171, 0.6);
+  border-radius: 50%;
+  color: #f0dda8;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.mosswing-duel-hud {
+  position: absolute;
+  z-index: 6;
+  top: max(4.3rem, calc(env(safe-area-inset-top) + 3.1rem));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.mosswing-score-card {
+  display: grid;
+  min-width: 5.4rem;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 0.75rem;
+  background: rgba(30, 48, 41, 0.8);
+  padding: 0.4rem 0.55rem;
+  color: #fff7e2;
+}
+
+.mosswing-score-card > span {
+  color: #d7ceab;
+  font-size: 0.55rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+}
+
+.mosswing-score-card > strong {
+  grid-row: span 2;
+  font-family: Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 500;
+}
+
+.mosswing-score-card > small {
+  color: #d2e0d1;
+  font-size: 0.58rem;
+}
+
+.mosswing-score-card.is-you {
+  border-color: rgba(224, 203, 143, 0.65);
+}
+
+.mosswing-vs {
+  color: #fff3d4;
+  font-family: Georgia, serif;
+  font-size: 0.78rem;
+  font-style: italic;
+  text-shadow: 0 1px 5px #1a3028;
+}
+
+.mosswing-reconnect-notice,
+.mosswing-eliminated {
+  position: absolute;
+  z-index: 7;
+  right: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 1rem;
+  width: fit-content;
+  margin: auto;
+  border: 1px solid rgba(245, 230, 187, 0.32);
+  border-radius: 999px;
+  background: rgba(31, 51, 42, 0.88);
+  padding: 0.6rem 0.9rem;
+  color: #f5edcf;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.mosswing-reconnect-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.mosswing-eliminated {
+  inset: 0;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  align-content: center;
+  justify-items: center;
+  border: 0;
+  border-radius: 0;
+  background: rgba(25, 41, 34, 0.46);
+  font-size: 1rem;
+}
+
+.mosswing-eliminated strong {
+  font-size: 1rem;
+}
+
+.mosswing-eliminated span {
+  font-size: 0.82rem;
+}
+
+.mosswing-result-shade {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background: rgba(14, 24, 21, 0.65);
+  padding: 1rem;
+}
+
+.mosswing-result-panel {
+  margin: auto;
+}
+
+.mosswing-result-panel h1 {
+  margin-top: 0.65rem;
+  color: #ead8a1;
+  letter-spacing: 0.06em;
+}
+
+.mosswing-result-scores {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin: 1.3rem 0;
+}
+
+.mosswing-result-scores > div {
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid rgba(228, 239, 221, 0.13);
+  border-radius: 0.85rem;
+  background: rgba(230, 241, 224, 0.05);
+  padding: 0.75rem;
+}
+
+.mosswing-result-scores small {
+  color: #bbc9b8;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+}
+
+.mosswing-result-scores strong {
+  color: #fff7e2;
+  font-family: Georgia, serif;
+  font-size: 1.8rem;
+  font-weight: 500;
+}
+
+.mosswing-result-panel > .mosswing-primary,
+.mosswing-result-panel > .mosswing-secondary {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.mosswing-solo-controls {
+  position: absolute;
+  z-index: 7;
+  top: max(0.8rem, env(safe-area-inset-top));
+  left: max(0.8rem, env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #fff7e2;
+  font-size: 0.7rem;
+  pointer-events: none;
+}
+
+.mosswing-solo-controls button {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 50%;
+  background: rgba(31, 51, 42, 0.65);
+  color: white;
+  pointer-events: auto;
+}
+
+@keyframes mosswing-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .mosswing-topbar {
+    grid-template-columns: 2.6rem 1fr 4.7rem;
+    gap: 0.2rem;
+  }
+
+  .mosswing-connection {
+    gap: 0.2rem;
+    font-size: 0.62rem;
+  }
+
+  .mosswing-panel h1 {
+    font-size: 2.4rem;
+  }
+
+  .mosswing-score-card {
+    min-width: 4.9rem;
+    padding: 0.35rem 0.45rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mosswing-online *,
+  .mosswing-online *::before,
+  .mosswing-online *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.mosswing-online {
+  --mosswing-arcade-blue: #12b9e8;
+  --mosswing-arcade-lime: #a4df42;
+  background: #7fdcfa url('/images/memo-sky.svg') center / 100% 100% fixed;
+}
+
+.mosswing-topbar {
+  grid-template-columns: 2.8rem 1fr auto;
+}
+
+.mosswing-back,
+.mosswing-solo-controls button {
+  border-color: rgba(215, 249, 255, 0.6);
+  background: rgba(7, 40, 58, 0.92);
+  color: #fff;
+}
+
+.mosswing-wordmark {
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(2, 36, 53, 0.7);
+}
+
+.mosswing-mark {
+  border-color: rgba(164, 223, 66, 0.85);
+  background: #a4df42;
+  color: #123849;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-weight: 900;
+}
+
+.mosswing-connection {
+  border: 1px solid rgba(215, 249, 255, 0.48);
+  border-radius: 999px;
+  background: rgba(7, 40, 58, 0.92);
+  padding: 0.48rem 0.65rem;
+  color: #ffe3b0;
+}
+
+.mosswing-connection.is-online {
+  color: #c9f58c;
+}
+
+.mosswing-lobby {
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(18, 185, 232, 0.3), transparent 46%),
+    linear-gradient(180deg, rgba(4, 44, 64, 0.92), rgba(6, 70, 87, 0.96));
+}
+
+.mosswing-panel {
+  border: 2px solid rgba(164, 223, 66, 0.76);
+  border-radius: 1.15rem;
+  background: linear-gradient(155deg, rgba(8, 63, 83, 0.98), rgba(5, 39, 61, 0.99));
+  box-shadow: 0 18px 50px rgba(2, 31, 47, 0.38);
+}
+
+.mosswing-panel h1 {
+  color: #fff;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-weight: 850;
+  letter-spacing: -0.045em;
+}
+
+.mosswing-panel h1 em,
+.mosswing-eyebrow,
+.mosswing-result-panel h1 {
+  color: var(--mosswing-arcade-lime);
+}
+
+.mosswing-panel > p,
+.mosswing-name-field,
+.mosswing-utility-actions button,
+.mosswing-panel-back {
+  color: #c7eff7;
+}
+
+.mosswing-name-field input,
+.mosswing-join-form input {
+  border-color: rgba(178, 236, 248, 0.52);
+  background: rgba(3, 32, 49, 0.88);
+  color: #fff;
+}
+
+.mosswing-primary {
+  border-color: #b7ee65;
+  background: linear-gradient(180deg, #b8ef62, #86c933);
+  color: #173a28;
+  box-shadow: 0 4px 0 #4e8d2b;
+}
+
+.mosswing-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #d2ff88, #9adc45);
+}
+
+.mosswing-secondary {
+  border-color: rgba(147, 226, 247, 0.48);
+  background: rgba(11, 138, 171, 0.55);
+  color: #f3fcff;
+}
+
+.mosswing-room-code {
+  border-color: rgba(164, 223, 66, 0.82);
+  background: rgba(164, 223, 66, 0.12);
+  color: #d7ff9a;
+}
+
+.mosswing-player-slot,
+.mosswing-result-scores > div {
+  border-color: rgba(143, 219, 239, 0.26);
+  background: rgba(11, 116, 145, 0.24);
+}
+
+.mosswing-player-avatar {
+  background: rgba(164, 223, 66, 0.2);
+  color: #d7ff9a;
+}
+
+.mosswing-player-slot strong,
+.mosswing-result-scores strong {
+  color: #fff;
+}
+
+.mosswing-player-slot small,
+.mosswing-result-scores small {
+  color: #bde8f2;
+}
+
+.mosswing-score-card {
+  border: 2px solid rgba(18, 185, 232, 0.92);
+  border-radius: 1rem;
+  background: rgba(5, 43, 62, 0.96);
+  padding: 0.45rem 0.7rem;
+  color: #fff;
+  box-shadow: 0 5px 16px rgba(3, 30, 45, 0.36);
+}
+
+.mosswing-score-card.is-you {
+  border-color: var(--mosswing-arcade-lime);
+}
+
+.mosswing-score-card > span {
+  color: #bde8f2;
+}
+
+.mosswing-score-card > strong {
+  color: var(--mosswing-arcade-lime);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-weight: 900;
+}
+
+.mosswing-score-card > small,
+.mosswing-vs {
+  color: #e3faff;
+}
+
+.mosswing-reconnect-notice,
+.mosswing-eliminated {
+  border: 2px solid rgba(164, 223, 66, 0.86);
+  background: rgba(5, 42, 61, 0.96);
+  color: #f6ffe9;
+  box-shadow: 0 8px 26px rgba(3, 30, 45, 0.32);
+}
+
+.mosswing-eliminated {
+  inset: auto auto max(1.25rem, env(safe-area-inset-bottom)) 50%;
+  display: grid;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  height: auto;
+  transform: translateX(-50%);
+  justify-items: center;
+  gap: 0.25rem;
+  border-radius: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  text-shadow: none;
+  pointer-events: none;
+}
+
+.mosswing-eliminated strong {
+  color: var(--mosswing-arcade-lime);
+  font-size: 0.92rem;
+  letter-spacing: 0.06em;
+}
+
+.mosswing-eliminated span {
+  color: #e4faff;
+  font-size: 0.76rem;
+}
+
+.mosswing-result-shade {
+  align-items: end;
+  background: transparent;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.mosswing-result-panel {
+  max-height: calc(100% - 5rem);
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.mosswing-feedback {
+  border-color: rgba(255, 218, 147, 0.58);
+  background: rgba(75, 43, 23, 0.96);
+}
+
+@media (max-width: 480px) {
+  .mosswing-duel-hud {
+    top: max(4.4rem, calc(env(safe-area-inset-top) + 3.2rem));
+    gap: 0.35rem;
+  }
+
+  .mosswing-score-card {
+    min-width: 4.7rem;
+    padding: 0.38rem 0.48rem;
+  }
+
+  .mosswing-score-card > span {
+    max-width: 5.2rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

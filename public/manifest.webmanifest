@@ -1,0 +1,18 @@
+{
+  "name": "Chicago",
+  "short_name": "Chicago",
+  "description": "Chicago : jeux, défis et performances",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#151e23",
+  "theme_color": "#151e23",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

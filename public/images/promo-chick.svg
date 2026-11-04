@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 340">
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#f8a646"/><stop offset="1" stop-color="#b74425"/></linearGradient>
+    <linearGradient id="armor" x2=".8" y2="1"><stop stop-color="#ffe17b"/><stop offset="1" stop-color="#e97025"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#fff5a8" stop-opacity=".85"/><stop offset="1" stop-color="#fff5a8" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="480" height="340" rx="34" fill="url(#bg)"/>
+  <circle cx="346" cy="104" r="115" fill="url(#glow)"/>
+  <path d="M0 278Q130 232 245 274t235-7v73H0Z" fill="#6a2d24" opacity=".45"/>
+  <path d="m87 245 40-94 36 7 28 87-27 21H105Z" fill="#273c58"/>
+  <path d="m124 177 4-61q4-43 50-42t53 45l-4 60q-6 44-53 44t-50-46Z" fill="#ffe1a0"/>
+  <path d="m132 113 12-28 18 18 20-30 22 28 19-17 12 35-27 17-64-4Z" fill="#ed6333"/>
+  <ellipse cx="157" cy="132" rx="8" ry="12" fill="#26364a"/><ellipse cx="204" cy="132" rx="8" ry="12" fill="#26364a"/>
+  <circle cx="159" cy="128" r="2.5" fill="#fff"/><circle cx="206" cy="128" r="2.5" fill="#fff"/>
+  <path d="m165 157 19 13 19-13-19 4Z" fill="#f3a927"/>
+  <path d="M149 197q35 24 68-1l26 57H121Z" fill="url(#armor)"/>
+  <path d="m235 206 57 37-13 18-68-29M130 208l-41 47 15 15 62-44" fill="#f5bd4b"/>
+  <path d="m150 253-20 62h-28l8-66m87 4 25 62h28l-13-71" fill="#32344b"/>
+  <path d="m281 90 23-39 16 26 34-4-20 25 14 29-34-11-27 20 4-33Z" fill="#fff0a0"/>
+  <text x="310" y="188" fill="#fff" font-family="Arial,sans-serif" font-size="33" font-weight="900" text-anchor="middle">CHICK</text>
+  <text x="310" y="224" fill="#ffe07a" font-family="Arial,sans-serif" font-size="33" font-weight="900" text-anchor="middle">POINT</text>
+  <path d="M274 239h74" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".8"/>
+</svg>

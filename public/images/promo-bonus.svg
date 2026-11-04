@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 340">
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#dcecf4"/><stop offset="1" stop-color="#9bbbd1"/></linearGradient>
+    <linearGradient id="gold" x2=".8" y2="1"><stop stop-color="#ffe88a"/><stop offset=".48" stop-color="#efbd39"/><stop offset="1" stop-color="#bd7620"/></linearGradient>
+    <radialGradient id="shine"><stop stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="480" height="340" rx="34" fill="url(#bg)"/>
+  <circle cx="237" cy="170" r="146" fill="url(#shine)" opacity=".55"/>
+  <path d="M0 290q120-62 240 0t240-2v52H0Z" fill="#537d99" opacity=".24"/>
+  <ellipse cx="242" cy="279" rx="135" ry="22" fill="#4c7082" opacity=".22"/>
+  <g transform="rotate(-12 205 171)">
+    <rect x="99" y="82" width="216" height="164" rx="24" fill="url(#gold)" stroke="#fff2b0" stroke-width="7"/>
+    <rect x="116" y="99" width="182" height="130" rx="17" fill="none" stroke="#fff4c2" stroke-width="3" opacity=".8"/>
+    <circle cx="207" cy="165" r="55" fill="#fff1b7" opacity=".25"/>
+    <path d="M207 120v91m-28-67q4-23 29-23t27 19q0 17-27 24t-29 25q0 21 29 21t29-22" fill="none" stroke="#fff9dc" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  <circle cx="344" cy="112" r="52" fill="#fff" stroke="#4f91b5" stroke-width="8"/>
+  <path d="m344 80 10 21 24 4-17 17 4 24-21-11-21 11 4-24-17-17 24-4Z" fill="#64a6c5"/>
+  <path d="m348 229 17 24 27 3-20 18 6 27-25-13-24 13 5-27-20-18 27-3Z" fill="#f7cf61"/>
+  <text x="240" y="315" fill="#294967" font-family="Arial,sans-serif" font-size="27" font-weight="900" text-anchor="middle">BONUS DE BIENVENUE</text>
+</svg>

@@ -1,0 +1,42 @@
+export const HEAD_FOOTBALL_CLUBS = [
+  ['Real Madrid', 'RMA', '#ffffff', '#febe10'],
+  ['Barcelone', 'BAR', '#a50044', '#004d98'],
+  ['Man. United', 'MUN', '#da291c', '#fbe122'],
+  ['Man. City', 'MCI', '#6cabdd', '#1c2c5b'],
+  ['Liverpool', 'LIV', '#c8102e', '#00b2a9'],
+  ['Chelsea', 'CHE', '#034694', '#ffffff'],
+  ['Arsenal', 'ARS', '#ef0107', '#ffffff'],
+  ['Tottenham', 'TOT', '#ffffff', '#132257'],
+  ['Bayern', 'BAY', '#dc052d', '#ffffff'],
+  ['Dortmund', 'BVB', '#fde100', '#000000'],
+  ['PSG', 'PSG', '#004170', '#da291c'],
+  ['Marseille', 'OM', '#2faee0', '#ffffff'],
+  ['Lyon', 'OL', '#ffffff', '#da291c'],
+  ['Monaco', 'ASM', '#e51b24', '#ffffff'],
+  ['Juventus', 'JUV', '#000000', '#ffffff'],
+  ['AC Milan', 'MIL', '#fb090b', '#000000'],
+  ['Inter', 'INT', '#0068a8', '#000000'],
+  ['AS Roma', 'ROM', '#8e1f2f', '#f0bc42'],
+  ['Naples', 'NAP', '#12a0d7', '#ffffff'],
+  ['Atlético', 'ATM', '#cb3524', '#272e61'],
+  ['Ajax', 'AJA', '#d2122e', '#ffffff'],
+  ['FC Porto', 'POR', '#003893', '#ffffff'],
+  ['Benfica', 'BEN', '#e30613', '#ffffff'],
+  ['Celtic', 'CEL', '#16a34a', '#ffffff'],
+  ['Galatasaray', 'GAL', '#a90432', '#fdb912'],
+  ['Flamengo', 'FLA', '#c52613', '#000000'],
+  ['Boca Juniors', 'BOC', '#103f91', '#f7b500'],
+  ['River Plate', 'RIV', '#ffffff', '#e30613'],
+  ['Santos', 'SAN', '#ffffff', '#000000'],
+  ['Al-Nassr', 'NAS', '#fcd116', '#003a8c'],
+] as const
+
+export const HEAD_FOOTBALL_PLAYERS = [
+  'Messi', 'Ronaldo', 'Neymar', 'Mbappé', 'Haaland', 'Benzema', 'Lewandowski', 'Modrić',
+  'De Bruyne', 'Salah', 'Vinícius Jr', 'Bellingham', 'Kane', 'Griezmann', 'Son', 'Pogba',
+  'Zidane', 'Ronaldinho', 'Maradona', 'Pelé', 'Henry', 'Beckham', 'Ibrahimović', 'Iniesta',
+  'Xavi', 'Kaká', 'R. Nazário', 'Cantona', 'Drogba', 'Eto’o', 'Totti', 'Pirlo', 'Buffon',
+  'Neuer', 'Courtois', 'Casillas', 'Cruyff', 'Platini', 'Raúl', 'Rooney',
+] as const
+
+export type HeadFootballSelection = { clubIndex: number; playerIndex: number }

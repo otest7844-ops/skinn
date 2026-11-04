@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320">
+  <defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#301434"/><stop offset=".55" stop-color="#9a342c"/><stop offset="1" stop-color="#ed9835"/></linearGradient><linearGradient id="fire" x2="0" y2="1"><stop stop-color="#fff59a"/><stop offset=".4" stop-color="#ffb331"/><stop offset="1" stop-color="#e5462e"/></linearGradient></defs>
+  <rect width="400" height="320" rx="28" fill="url(#bg)"/><circle cx="225" cy="168" r="120" fill="#ffb443" opacity=".18"/>
+  <path d="M59 258q42-73 77-91-30-39 4-85 12 43 50 51 9-51 56-75-18 58 4 83 36-32 88-25-49 32-61 72 44 19 75 70h-93l-28-31-39 37-44-35-27 29Z" fill="#401d36" stroke="#ffcc5e" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M194 112q38 8 51 37l-23 26-34-12-25 21-5-27 23-18Z" fill="#ec6435"/>
+  <path d="m209 121 9-24 14 22m-44 10-13-20 27 8" fill="#ffd46c"/>
+  <circle cx="216" cy="136" r="5" fill="#fff6a8"/><circle cx="217" cy="136" r="2.5" fill="#28213a"/>
+  <path d="M142 245q61 41 119-5l-20 53q-53 23-93-3Z" fill="url(#fire)"/>
+  <text x="200" y="304" fill="#fff3d4" font-family="Arial,sans-serif" font-size="26" font-weight="900" text-anchor="middle">BURNING HOT</text>
+</svg>

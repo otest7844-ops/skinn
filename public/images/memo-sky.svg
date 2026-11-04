@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#7fdcfa"/>
+      <stop offset="1" stop-color="#4fcaf5"/>
+    </linearGradient>
+    <linearGradient id="cliff" x2="1">
+      <stop stop-color="#868693"/>
+      <stop offset="1" stop-color="#74747f"/>
+    </linearGradient>
+    <radialGradient id="cloud">
+      <stop stop-color="#fff" stop-opacity=".85"/>
+      <stop offset=".72" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <ellipse cx="145" cy="176" rx="228" ry="64" fill="url(#cloud)"/>
+  <ellipse cx="360" cy="496" rx="270" ry="80" fill="url(#cloud)" opacity=".85"/>
+  <ellipse cx="840" cy="656" rx="240" ry="72" fill="url(#cloud)" opacity=".76"/>
+  <ellipse cx="960" cy="96" rx="180" ry="48" fill="url(#cloud)" opacity=".82"/>
+  <path fill="url(#cliff)" d="M1200 0h-43l-46 112 20 112-49 144 37 96-46 144 41 112-26 80h112z"/>
+</svg>
