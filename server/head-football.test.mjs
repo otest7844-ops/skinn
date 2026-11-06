@@ -30,7 +30,7 @@ test('keeps players valid during countdown and moves them once play begins', () 
   assert.ok(match.players[1].x < 936)
 })
 
-test('authoritatively applies kicks, scores goals, and ends after thirty seconds', () => {
+test('authoritatively applies kicks and ends the match after a player scores ten goals', () => {
   const match = createHeadFootballMatch([null, null])
   match.status = 'play'
   match.ball = { x: 372, y: 377, vx: 0, vy: 0, rotation: 0, fire: 0 }
@@ -43,10 +43,20 @@ test('authoritatively applies kicks, scores goals, and ends after thirty seconds
   assert.deepEqual(match.scores, [1, 0])
   assert.equal(match.status, 'goal')
 
-  const timedMatch = createHeadFootballMatch([null, null])
-  timedMatch.status = 'play'
-  timedMatch.remaining = 1 / 100
-  tickHeadFootballMatch(timedMatch, 1 / 20, [neutral, neutral])
-  assert.equal(timedMatch.status, 'finished')
-  assert.equal(timedMatch.winner, null)
+  const matchToTen = createHeadFootballMatch([null, null])
+  matchToTen.status = 'play'
+  matchToTen.scores[0] = 9
+  matchToTen.ball = { x: 1080, y: 300, vx: 0, vy: 0, rotation: 0, fire: 0 }
+  tickHeadFootballMatch(matchToTen, 1 / 20, [neutral, neutral])
+  assert.deepEqual(matchToTen.scores, [10, 0])
+  assert.equal(matchToTen.status, 'goal')
+  for (let frame = 0; frame < 36; frame += 1) tickHeadFootballMatch(matchToTen, 1 / 20, [neutral, neutral])
+  assert.equal(matchToTen.status, 'finished')
+  assert.equal(matchToTen.winner, 0)
+
+  const untimedMatch = createHeadFootballMatch([null, null])
+  untimedMatch.status = 'play'
+  for (let frame = 0; frame < 1200; frame += 1) tickHeadFootballMatch(untimedMatch, 1 / 20, [neutral, neutral])
+  assert.equal(untimedMatch.status, 'play')
+  assert.deepEqual(untimedMatch.scores, [0, 0])
 })

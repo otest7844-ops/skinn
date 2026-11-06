@@ -7,7 +7,7 @@
 @media (prefers-color-scheme:dark){:root{--bg:#10244a}}
 html,body{height:100%;margin:0;background:#7fdcfa url('/images/memo-sky.svg') center/100% 100% fixed;color:var(--fg);overflow:hidden;touch-action:none;font-family:system-ui,sans-serif;user-select:none;-webkit-user-select:none}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
-#hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:0;right:0;display:none;justify-content:space-between;padding:0 16px;font-weight:800;font-size:20px;text-shadow:0 2px 4px #000;pointer-events:none}
+#hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:0;right:0;display:none;justify-content:space-between;align-items:center;gap:8px;padding:0 16px;font-weight:800;font-size:20px;text-shadow:0 2px 4px #000;pointer-events:none}
 #pw{position:fixed;top:calc(env(safe-area-inset-top,0px) + 42px);left:16px;font-weight:700;font-size:15px;text-shadow:0 2px 4px #000;pointer-events:none}
 #hb{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:none;padding:12px 18px;font-size:18px}
 #sound{position:fixed;z-index:20;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;padding:8px 11px;font-size:17px;line-height:1;background:#10152dcc;color:#fff;border:1px solid #ffffff55;box-shadow:none}
@@ -23,7 +23,7 @@ button:disabled{opacity:.5}
 .sw{width:44px;height:44px;border-radius:50%;border:3px solid #fff}
 </style></head>
 <body>
-<div id="hud"><span><span id="sc">0</span> <span id="mu"></span></span><span id="co">🪙 0</span></div><div id="pw"></div>
+<div id="hud"><span><span id="sc">0</span> <span id="mu"></span></span><span id="life" role="status" aria-live="polite">❤️ 20/20</span><span id="co">🪙 0</span></div><div id="pw" role="status" aria-live="polite"></div>
 <button id="sound" class="s" type="button" aria-label="Désactiver les effets sonores" aria-pressed="false">🔊</button>
 <button id="hb" class="s">🛹 ×3</button>
 <div class="scr" id="menu" style="display:flex"><h1>BALL RUSH 3D</h1><p id="mi"></p><button id="play">JOUER</button><div class="g"><button class="s" id="b1">Balles</button><button class="s" id="b2">Hoverboards</button></div><p>Glisse ← → pour contourner, ↑ pour sauter · double toucher ou Espace : hoverboard</p></div>
@@ -141,7 +141,7 @@ function addItem(k,lane,z,y){
   m.position.set(LANES[lane],y||1,z);m.userData.k=k;S.add(m);items.push(m)}
 const pg=new THREE.BoxGeometry(.12,.12,.12),pm=new THREE.MeshBasicMaterial({color:0xffd24a}),pf=new THREE.MeshBasicMaterial({color:0xff8a1a});
 function burst(p,n,mat,sp){for(let i=0;i<n;i++){const m=new THREE.Mesh(pg,mat);m.position.copy(p);m.userData.v=new THREE.Vector3((Math.random()-.5)*sp,Math.random()*sp,(Math.random()-.5)*sp);m.userData.t=.5;S.add(m);parts.push(m)}}
-let st='menu',lane=1,px=0,py=0,vy=0,slide=0,speed=15,dist=0,score=0,nc=0,acc=0,gap=16,tm=0,magT=0,jetT=0,shoeT=0,x2T=0,bT=0,boards=3,inv=0,shake=0,stumble=0,copD=9;
+let st='menu',lane=1,px=0,py=0,vy=0,slide=0,speed=15,dist=0,score=0,nc=0,acc=0,gap=16,tm=0,magT=0,jetT=0,shoeT=0,x2T=0,bT=0,boards=3,inv=0,shake=0,copD=9,hits=0,hitNotice=0;
 let arenaOnline=false,arenaPaused=false,arenaSlot=-1,arenaSeed=1,arenaTrackRandom=Math.random,arenaLastPublish=0,arenaRemotePlayer=null,arenaRemoteFrom=null,arenaRemoteAt=0;
 let arenaNames=['Joueur 1','Joueur 2'];
 function setArenaSeed(seed){arenaSeed=(Number.isInteger(seed)&&seed>0?seed:1)>>>0;let value=arenaSeed;arenaTrackRandom=()=>{value=(value*1664525+1013904223)>>>0;return value/4294967296}}
@@ -162,7 +162,7 @@ function spawn(){
 }
 function reset(){
   obs.forEach(o=>S.remove(o.m));items.forEach(c=>S.remove(c));obs=[];items=[];
-  lane=1;px=0;py=0;vy=0;slide=0;speed=15;dist=0;score=0;nc=0;acc=0;tm=0;magT=jetT=shoeT=x2T=bT=0;boards=3;inv=0;stumble=0;copD=9;st='run';
+  lane=1;px=0;py=0;vy=0;slide=0;speed=15;dist=0;score=0;nc=0;acc=0;tm=0;magT=jetT=shoeT=x2T=bT=0;boards=3;inv=0;hits=0;hitNotice=0;copD=9;st='run';
   ['menu','shop','over'].forEach(i=>sh(i,'none'));sh('hud','flex');sh('hb','block');P.rotation.y=0;
   sfx('start');
 }
@@ -171,7 +171,7 @@ function die(){
   sfx('over');
   st='over';shake=.6;D.coins+=nc;const nb=score>D.best;if(nb)D.best=score;sv();
   sh('hud','none');sh('hb','none');$('pw').textContent='';
-  $('oi').textContent='Score : '+Math.floor(score)+(nb?' 🏆 Nouveau record !':'')+' · Record : '+Math.floor(D.best)+' · +'+nc+' 🪙'+(arenaOnline?' · En attente de la fin de la manche…':'');
+  $('oi').textContent='20 obstacles touchés · Score : '+Math.floor(score)+(nb?' 🏆 Nouveau record !':'')+' · Record : '+Math.floor(D.best)+' · +'+nc+' 🪙'+(arenaOnline?' · En attente du résultat de la manche…':'');
   if(arenaOnline){$('again').style.display='none';$('home').style.display='none'}
   sh('over','flex');
 }
@@ -179,8 +179,9 @@ function kill(o){S.remove(o.m);obs.splice(obs.indexOf(o),1)}
 function crash(o){
   if(inv>0||jetT>0)return false;
   if(bT>0){bT=0;inv=1.5;shake=.4;burst(P.position,12,pf,6);sfx('shield');kill(o);return false}
-  if(stumble>0){die();return true}
-  stumble=8;inv=1.5;shake=.4;sfx('hit');kill(o);return false;
+  hits=Math.min(20,hits+1);hitNotice=1.6;inv=1.5;shake=.4;sfx('hit');kill(o);
+  if(hits>=20){die();return true}
+  return false;
 }
 function board(){if(st==='run'&&bT<=0&&boards>0&&jetT<=0){boards--;bT=10;sfx('board')}}
 function jump(){if(st==='run'&&py<=gY+.02){vy=shoeT>0?15:10.5;slide=0;sfx('jump')}else if(st==='run')jb=.15}
@@ -209,7 +210,7 @@ const arenaOpponentHud=document.createElement('div');arenaOpponentHud.id='arena-
 function arenaPublish(){
   if(!arenaOnline||arenaPaused||!['run','over'].includes(st)||performance.now()-arenaLastPublish<75)return;
   arenaLastPublish=performance.now();
-  parent.postMessage({type:'ball-rush:state',state:{x:px,y:py,lane,score:Math.floor(score),coins:nc,alive:st==='run'}},location.origin);
+  parent.postMessage({type:'ball-rush:state',state:{x:px,y:py,lane,score:Math.floor(score),coins:nc,hits,alive:st==='run'}},location.origin);
 }
 function arenaApply(snapshot){
   if(!arenaOnline||!snapshot||!Array.isArray(snapshot.players))return;
@@ -227,7 +228,8 @@ function arenaApply(snapshot){
   if(arenaRemotePlayer){
     arenaOpponentHud.style.display='block';
     const name=arenaNames[1-arenaSlot]||`Joueur ${2-arenaSlot}`;
-    arenaOpponentHud.textContent=`${name} · ${Math.floor(arenaRemotePlayer.score||0)} pts · ${arenaRemotePlayer.alive?'EN COURSE':'ÉLIMINÉ'}`;
+    const remainingLives=Math.max(0,20-(arenaRemotePlayer.hits||0));
+    arenaOpponentHud.textContent=`${name} · ${Math.floor(arenaRemotePlayer.score||0)} pts · ${remainingLives}/20 vies · ${arenaRemotePlayer.alive?'EN COURSE':'ÉLIMINÉ'}`;
   }
 }
 window.addEventListener('message',event=>{
@@ -252,8 +254,7 @@ function loop(now){
     const mul=(x2T>0?2:1);score+=dz*mul;
     if(acc>gap){acc=0;gap=Math.max(9,16-tm*.04)+arenaTrackRandom()*7;spawn()}
     px+=(LANES[lane]-px)*Math.min(1,dt*18);
-    [['magT'],['shoeT'],['x2T'],['bT'],['inv'],['stumble']].forEach(()=>{});
-    magT=Math.max(0,magT-dt);shoeT=Math.max(0,shoeT-dt);x2T=Math.max(0,x2T-dt);bT=Math.max(0,bT-dt);stumble=Math.max(0,stumble-dt);
+    magT=Math.max(0,magT-dt);shoeT=Math.max(0,shoeT-dt);x2T=Math.max(0,x2T-dt);bT=Math.max(0,bT-dt);hitNotice=Math.max(0,hitNotice-dt);
     if(inv>0)inv-=dt;if(slide>0)slide-=dt;
     if(jetT>0){jetT-=dt;if(jetT<=0)inv=1.5}
     // ground height
@@ -281,9 +282,10 @@ function loop(now){
     hbd.visible=bT>0;bub.visible=bT>0;jp.visible=jetT>0;
     if(bT>0){lL.rotation.x=lR.rotation.x=0}
     $('sc').textContent=Math.floor(score);$('mu').textContent=x2T>0?'×2':'';$('co').textContent='🪙 '+nc;$('hb').textContent='🛹 ×'+boards;
-    $('pw').textContent=(magT>0?'🧲'+Math.ceil(magT)+'s ':'')+(jetT>0?'🚀'+Math.ceil(jetT)+'s ':'')+(shoeT>0?'👟'+Math.ceil(shoeT)+'s ':'')+(bT>0?'🛹'+Math.ceil(bT)+'s ':'')+(stumble>0?'⚠️ DERNIÈRE CHANCE':'');
+    $('life').textContent=`❤️ ${20-hits}/20${hitNotice>0?' · Impact !':''}`;
+    $('pw').textContent=(magT>0?'🧲'+Math.ceil(magT)+'s ':'')+(jetT>0?'🚀'+Math.ceil(jetT)+'s ':'')+(shoeT>0?'👟'+Math.ceil(shoeT)+'s ':'')+(bT>0?'🛹'+Math.ceil(bT)+'s ':'')+(hitNotice>0?`💥 Obstacle ${hits}/20 · ${20-hits} vies restantes`:'');
     // chaser
-    const cT=stumble>0?2.6:10;copD+=(cT-copD)*Math.min(1,dt*2);
+    const cT=10;copD+=(cT-copD)*Math.min(1,dt*2);
     cop.position.set(px*.9,py*0,copD);dog.position.set(px*.9+.9,0,copD+.8);
     cL.rotation.x=Math.sin(a)*.9;cR.rotation.x=-Math.sin(a)*.9;dl.forEach((l,i)=>l.rotation.x=Math.sin(a*1.5+i*1.6)*.8);dog.position.y=Math.abs(Math.sin(a*1.5))*.15;
     cop.visible=dog.visible=false;

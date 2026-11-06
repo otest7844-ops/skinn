@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { io } from 'socket.io-client'
 import {
   BarChart3,
   Bell,
@@ -11,11 +12,13 @@ import {
   HelpCircle,
   Home,
   Leaf,
-  MapPin,
   Minus,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Plus,
+  Search,
   Sparkles,
   Sun,
   Swords,
@@ -34,9 +37,14 @@ import MemoGame from './MemoGame'
 import TapTapeArena from './TapTapeArena'
 import ArenaRoom from './ArenaRoom'
 import HeadFootballGame from './HeadFootballGame'
+import SoccerArena from './SoccerArena'
+import PublicRooms, { type PublicRoom } from './PublicRooms'
+import { getDemoWalletId } from './demo-wallet'
+import { getMultiplayerUrl } from './multiplayer-url'
+import './DesktopLayout.css'
 
 type ArenaGameId = 'tic-tac-toe' | ArcadeGameId
-type Page = 'popular' | 'performance' | 'coupon' | 'invite' | 'account'
+type Page = 'popular' | 'games' | 'performance' | 'coupon' | 'invite' | 'account'
 type ThemeMode = 'dark' | 'light' | 'lime'
 
 type MatchOption = 'V1' | 'X' | 'V2'
@@ -57,6 +65,8 @@ type DemoCoupon = {
   potential: number
   createdAt: string
   status: TicketStatus
+  combinedOdds?: number
+  demoOnly?: boolean
 }
 
 type DuelInvite = {
@@ -144,8 +154,8 @@ const allGames = [
     type: 'tictactoe' as const,
   },
   {
-    id: 'cosmic-arena',
-    title: 'Cosmic Arena',
+    id: 'ping-pong',
+    title: 'Ping Pong',
     image: '/images/game-ping-pong.jpg',
     type: 'arcade' as const,
     arcadeGameId: 'ping-pong' as ArcadeGameId,
@@ -169,6 +179,41 @@ const allGames = [
     title: 'Mosswing Online',
     image: '/images/mosswing-online.jpg',
     type: 'mosswing' as const,
+  },
+  {
+    id: 'forest-bridge',
+    title: 'Pont de la forêt 3D',
+    image: '/images/forest-bridge.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'forest-bridge' as ArcadeGameId,
+  },
+  {
+    id: 'princess-race',
+    title: 'La Course vers la Princesse',
+    image: '/images/princess-race.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'princess-race' as ArcadeGameId,
+  },
+  {
+    id: 'damned-maze',
+    title: 'Le Labyrinthe des Damnés',
+    image: '/images/damned-maze.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'damned-maze' as ArcadeGameId,
+  },
+  {
+    id: 'grotte-aux-couteaux',
+    title: 'Grotte aux Couteaux',
+    image: '/images/damned-maze.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'grotte-aux-couteaux' as ArcadeGameId,
+  },
+  {
+    id: 'colonnes-du-canyon',
+    title: 'Colonnes du Canyon',
+    image: '/images/forest-bridge.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'colonnes-du-canyon' as ArcadeGameId,
   },
 ]
 
@@ -196,7 +241,7 @@ const allMatchesList: Match[] = [
   },
   {
     id: 'laliga',
-    category: 'racing',
+    category: 'football',
     league: 'Espagne, La Liga',
     home: 'Real Madrid',
     away: 'FC Barcelone',
@@ -230,14 +275,26 @@ const allMatchesList: Match[] = [
   {
     id: 'communaute-bleue',
     category: 'communaute',
-    league: 'Choix de la communauté',
-    home: 'Équipe bleue',
-    away: 'Équipe or',
+    league: 'Choix de la communautÃ©',
+    home: 'Ã‰quipe bleue',
+    away: 'Ã‰quipe or',
     homeOdds: 1.91,
     drawOdds: 3.25,
     awayOdds: 1.88,
     image: '/images/promo-bonus.svg',
   },
+]
+
+const betCategories: Array<{
+  id: Match['category']
+  label: string
+  image: string
+  icon: typeof CircleDot
+}> = [
+  { id: 'football', label: 'Football', image: '/images/extracted/event-bundesliga.png', icon: CircleDot },
+  { id: 'esport', label: 'E-sport', image: '/images/promo-champion.svg', icon: Gamepad2 },
+  { id: 'duel', label: 'Duels', image: '/images/game-crash.svg', icon: Swords },
+  { id: 'communaute', label: 'Communauté', image: '/images/promo-bonus.svg', icon: UserPlus },
 ]
 
 /* SVG Ribbon Medal Component matching the screenshot badges */
@@ -297,13 +354,23 @@ export default function App() {
 
   const [page, setPage] = useState<Page>('popular')
   const [category, setCategory] = useState('Populaires')
+  const [selectedMatchCategory, setSelectedMatchCategory] = useState<Match['category'] | 'all'>('all')
+  const [sidebarCompact, setSidebarCompact] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Balance and Wallet state
-  const [balance, setBalance] = useState(19.0)
+  const [balance, setBalance] = useState(() => {
+    const saved = Number(window.localStorage.getItem('chicago-demo-balance'))
+    return Number.isFinite(saved) && saved > 0 ? saved : 10_000
+  })
+  const sportsbookSocket = useRef<ReturnType<typeof io> | null>(null)
+  const [sportsbookConnected, setSportsbookConnected] = useState(false)
+  const [sportsbookMatches, setSportsbookMatches] = useState<Match[]>(allMatchesList)
+  const [couponSubmitting, setCouponSubmitting] = useState(false)
+  const [balancePulse, setBalancePulse] = useState(false)
   const withdrawalBalance = 0
   const bonusBalance = 0
   const [walletModalOpen, setWalletModalOpen] = useState(false)
-  const [depositAmount, setDepositAmount] = useState('50.00')
 
   // Notifications state
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -315,44 +382,13 @@ export default function App() {
   const [activeMemo, setActiveMemo] = useState(false)
   const [activeTapTape, setActiveTapTape] = useState(false)
   const [activeHeadFootball, setActiveHeadFootball] = useState(false)
+  const [activeFootball19, setActiveFootball19] = useState(false)
+  const [publicRoomJoin, setPublicRoomJoin] = useState<PublicRoom | null>(null)
 
   // Betting / Coupon state
   const [selections, setSelections] = useState<CouponSelection[]>([])
   const [stake, setStake] = useState('500')
-  const [history, setHistory] = useState<DemoCoupon[]>([
-    {
-      id: 'COUPON-8841',
-      selections: [
-        {
-          matchId: 'bundesliga',
-          matchTitle: 'Bayern Munich - Borussia Dortmund',
-          selection: 'Bayern Munich',
-          option: 'V1',
-          odds: 1.82,
-        },
-      ],
-      stake: 1000,
-      potential: 1820,
-      createdAt: 'Aujourd’hui · 00:45',
-      status: 'pending',
-    },
-    {
-      id: 'COUPON-7932',
-      selections: [
-        {
-          matchId: 'laliga',
-          matchTitle: 'Real Madrid - FC Barcelone',
-          selection: 'Real Madrid',
-          option: 'V1',
-          odds: 2.15,
-        },
-      ],
-      stake: 500,
-      potential: 1075,
-      createdAt: 'Hier · 19:20',
-      status: 'won',
-    },
-  ])
+  const [history, setHistory] = useState<DemoCoupon[]>([])
 
   // Duels state
   const [incomingInvites, setIncomingInvites] = useState<DuelInvite[]>([
@@ -372,11 +408,50 @@ export default function App() {
     window.setTimeout(() => setToast(null), 2800)
   }
 
+  const updateDemoBalance = useCallback((value: number) => {
+    setBalance(value)
+    setBalancePulse(true)
+    window.setTimeout(() => setBalancePulse(false), 700)
+  }, [])
+
   // Update HTML body attribute on theme change
   useEffect(() => {
     document.body.setAttribute('data-theme', theme)
     window.localStorage.setItem('game_arena_theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    window.localStorage.setItem('chicago-demo-balance', String(balance))
+  }, [balance])
+
+  useEffect(() => {
+    const socket = io(getMultiplayerUrl(), { reconnection: true, reconnectionAttempts: 8, timeout: 8000 })
+    const walletId = getDemoWalletId()
+    sportsbookSocket.current = socket
+
+    socket.on('connect', () => {
+      setSportsbookConnected(true)
+      socket.emit('arena:sportsbook:catalog:request')
+      socket.emit('arena:coupon:history:request', { walletId })
+      socket.emit('arena:demo-wallet:request', { walletId })
+    })
+    socket.on('disconnect', () => {
+      setSportsbookConnected(false)
+      setCouponSubmitting(false)
+    })
+    socket.on('arena:sportsbook:catalog', (catalog: Match[]) => setSportsbookMatches(catalog))
+    socket.on('arena:coupon:history', (payload: { tickets: DemoCoupon[] }) => {
+      if (Array.isArray(payload?.tickets)) setHistory(payload.tickets)
+    })
+    socket.on('arena:demo-wallet', (payload: { balance: number }) => {
+      if (Number.isSafeInteger(payload?.balance) && payload.balance >= 0) updateDemoBalance(payload.balance)
+    })
+
+    return () => {
+      sportsbookSocket.current = null
+      socket.disconnect()
+    }
+  }, [updateDemoBalance])
 
   function toggleTheme() {
     setTheme((prev) => (prev === 'dark' ? 'light' : prev === 'light' ? 'lime' : 'dark'))
@@ -387,37 +462,51 @@ export default function App() {
     const exists = selections.some((s) => s.matchId === match.id && s.option === option)
     if (exists) {
       setSelections((prev) => prev.filter((s) => !(s.matchId === match.id && s.option === option)))
-      showToast('Pari retiré du coupon')
+      showToast('Pari retirÃ© du coupon')
     } else {
       setSelections((prev) => [
         ...prev.filter((s) => s.matchId !== match.id),
         { matchId: match.id, matchTitle: `${match.home} - ${match.away}`, selection: label, option, odds },
       ])
-      showToast('Pari ajouté au coupon')
+      showToast('Pari ajoutÃ© au coupon')
     }
   }
 
   function handleValidateCoupon() {
-    const numStake = Number(stake) || 0
-    if (numStake <= 0 || !selections.length) {
-      showToast('Veuillez sélectionner au moins un match et une mise valide.')
+    const numStake = Number(stake)
+    const socket = sportsbookSocket.current
+    if (!Number.isSafeInteger(numStake) || numStake < 50 || numStake > 10_000 || !selections.length) {
+      showToast('La mise doit être de 50 à 10 000 crédits démo et contenir au moins un choix.')
       return
     }
-    const combinedOdds = selections.reduce((acc, cur) => acc * cur.odds, 1)
-    const potential = Math.round(numStake * combinedOdds)
-
-    const newCoupon: DemoCoupon = {
-      id: `COUPON-${Math.floor(1000 + Math.random() * 9000)}`,
-      selections,
-      stake: numStake,
-      potential,
-      createdAt: 'À l’instant',
-      status: 'pending',
+    if (!socket?.connected || couponSubmitting) {
+      showToast('Connexion au portefeuille démo indisponible.')
+      return
     }
 
-    setHistory((prev) => [newCoupon, ...prev])
-    setSelections([])
-    showToast('Coupon validé avec succès !')
+    setCouponSubmitting(true)
+    const idempotencyKey = `coupon-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    socket.timeout(8000).emit('arena:coupon:place', {
+      walletId: getDemoWalletId(),
+      stake: numStake,
+      idempotencyKey,
+      selections: selections.map(({ matchId, option }) => ({ matchId, option })),
+    }, (error: Error | null, result?: { ok: boolean; error?: string; ticket?: DemoCoupon; balance?: number }) => {
+      setCouponSubmitting(false)
+      if (error) {
+        showToast('Le serveur ne répond pas. Vérifiez la connexion puis réessayez.')
+        return
+      }
+      if (!result?.ok || !result.ticket || typeof result.balance !== 'number' || !Number.isSafeInteger(result.balance)) {
+        showToast(result?.error ?? 'Impossible de valider le coupon.')
+        return
+      }
+      const { ticket, balance: serverBalance } = result
+      setHistory((prev) => [ticket, ...prev.filter((currentTicket) => currentTicket.id !== ticket.id)])
+      updateDemoBalance(serverBalance)
+      setSelections([])
+      showToast('Coupon démo enregistré. Le résultat sportif reste en attente.')
+    })
   }
 
   function handleSendDuel(e: FormEvent) {
@@ -438,11 +527,12 @@ export default function App() {
       ...prev,
     ])
     setInvitePlayer('')
-    showToast(`Défi envoyé à ${invitePlayer.trim()} pour ${amount} XOF !`)
+    showToast(`DÃ©fi envoyÃ© Ã  ${invitePlayer.trim()} pour ${amount} XOF !`)
   }
 
   // Launch a game
   function handleLaunchGame(game: typeof allGames[0]) {
+    setPublicRoomJoin(null)
     if (game.id === 'memo-5x5') {
       setActiveMemo(true)
       return
@@ -472,19 +562,68 @@ export default function App() {
     setActiveArcadeGame('ball-rush')
   }
 
+  function joinPublicRoom(room: PublicRoom) {
+    setPublicRoomJoin(room)
+    if (room.game === 'tic-tac-toe') {
+      setActiveArcadeGame('tic-tac-toe')
+    } else if (['ping-pong', 'basketball-stars', 'ball-rush', 'cannon-duel', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon'].includes(room.game)) {
+      setActiveArcadeGame(room.game as ArcadeGameId)
+    } else if (room.game === 'football-19') {
+      setActiveFootball19(true)
+    } else if (room.game === 'memo-5x5') {
+      setActiveMemo(true)
+    } else if (room.game === 'head-football') {
+      setActiveHeadFootball(true)
+    } else if (room.game === 'tap-tape-arena') {
+      setActiveTapTape(true)
+    } else if (room.game === 'mosswing-online') {
+      setActiveMosswing(true)
+    }
+  }
+
   // If Simple Intro is active
   if (showIntro) {
     return <SimpleIntro onEnter={() => setShowIntro(false)} />
   }
 
-  if (activeMemo) return <MemoGame onClose={() => setActiveMemo(false)} />
+  if (activeMemo) {
+    return (
+      <ArenaRoom
+        game="memo-5x5"
+        title="MÃ©mo 5Ã—5"
+        publicJoin={publicRoomJoin}
+        onWalletBalance={updateDemoBalance}
+        onClose={() => { setActiveMemo(false); setPublicRoomJoin(null) }}
+        renderGame={({ room, local, onClose, onAction }) => (
+          <MemoGame room={room} local={local} onAction={onAction} onClose={onClose} />
+        )}
+      />
+    )
+  }
+
+  if (activeFootball19) {
+    return (
+      <ArenaRoom
+        game="football-19"
+        title="Football 19"
+        publicJoin={publicRoomJoin}
+        onWalletBalance={updateDemoBalance}
+        onClose={() => { setActiveFootball19(false); setPublicRoomJoin(null) }}
+        renderGame={({ room, onClose, onAction }) => (
+          <SoccerArena room={room} onAction={onAction} onClose={onClose} />
+        )}
+      />
+    )
+  }
 
   if (activeHeadFootball) {
     return (
       <ArenaRoom
         game="head-football"
         title="Head Football"
-        onClose={() => setActiveHeadFootball(false)}
+        publicJoin={publicRoomJoin}
+        onWalletBalance={updateDemoBalance}
+        onClose={() => { setActiveHeadFootball(false); setPublicRoomJoin(null) }}
         renderGame={({ room, local, onAction }) => (
           <HeadFootballGame room={room} local={local} onAction={onAction} />
         )}
@@ -498,7 +637,9 @@ export default function App() {
       <ArenaRoom
         game="tap-tape-arena"
         title="Tape-Tape Arena"
-        onClose={() => setActiveTapTape(false)}
+        publicJoin={publicRoomJoin}
+        onWalletBalance={updateDemoBalance}
+        onClose={() => { setActiveTapTape(false); setPublicRoomJoin(null) }}
         renderGame={({ room, onClose, onAction }) => (
           <TapTapeArena onClose={onClose} room={room} onAction={onAction} />
         )}
@@ -508,27 +649,56 @@ export default function App() {
 
   // If Mosswing 3D WebGL is open
   if (activeMosswing) {
-    return <MosswingOnline onClose={() => setActiveMosswing(false)} />
+    return (
+      <MosswingOnline
+        publicJoin={publicRoomJoin}
+        onWalletBalance={updateDemoBalance}
+        onClose={() => { setActiveMosswing(false); setPublicRoomJoin(null) }}
+      />
+    )
   }
 
   // If an Arcade duel game is open
   if (activeArcadeGame) {
     if (activeArcadeGame === 'tic-tac-toe') {
-      return <TicTacToeOnline onClose={() => setActiveArcadeGame(null)} />
+      return <TicTacToeOnline publicJoin={publicRoomJoin} onClose={() => { setActiveArcadeGame(null); setPublicRoomJoin(null) }} />
     }
-    return <ArcadeOnline game={activeArcadeGame} onClose={() => setActiveArcadeGame(null)} />
+    return (
+      <ArcadeOnline
+        game={activeArcadeGame}
+        publicJoin={publicRoomJoin}
+        onWalletBalance={updateDemoBalance}
+        onClose={() => { setActiveArcadeGame(null); setPublicRoomJoin(null) }}
+      />
+    )
   }
 
   const isDark = theme !== 'light'
+  const searchTerm = searchQuery.trim().toLocaleLowerCase()
+  const matchingGames = searchTerm
+    ? allGames.filter((game) => game.title.toLocaleLowerCase().includes(searchTerm)).slice(0, 5)
+    : []
+  const matchingMatches = searchTerm
+    ? sportsbookMatches.filter((match) => `${match.home} ${match.away} ${match.league}`.toLocaleLowerCase().includes(searchTerm)).slice(0, 3)
+    : []
+  const visibleMatches = selectedMatchCategory === 'all'
+    ? sportsbookMatches
+    : sportsbookMatches.filter((match) => match.category === selectedMatchCategory)
+  const desktopNavigation: Array<{ page: Page; label: string; icon: typeof Home }> = [
+    { page: 'popular', label: 'Accueil', icon: Home },
+    { page: 'games', label: 'Jeux', icon: Grid2X2 },
+    { page: 'coupon', label: 'Paris & coupons', icon: CreditCard },
+    { page: 'performance', label: 'Classement', icon: BarChart3 },
+    { page: 'invite', label: 'Inviter', icon: UserPlus },
+    { page: 'account', label: 'Mon compte', icon: User },
+  ]
 
   return (
     <div
-      className={`chicago-world relative isolate min-h-screen w-full transition-colors duration-200 overflow-x-hidden ${
-        theme === 'lime'
-          ? 'bg-[#10170b] text-white'
-          : isDark
-            ? 'bg-[#0B0D19] text-white'
-            : 'bg-[#F3F4F9] text-[#0F172A]'
+      className={`chicago-world desktop-app-shell ${sidebarCompact ? 'is-sidebar-compact' : ''} relative isolate min-h-screen w-full transition-colors duration-200 overflow-x-clip ${
+        theme === 'lime' ? 'bg-[#10170b] text-white'
+          : isDark ? 'bg-[#0B0D19] text-white'
+            : 'bg-[#DCEEFF] text-[#0F172A]'
       }`}
     >
       {/* Toast Popup */}
@@ -542,17 +712,58 @@ export default function App() {
         <span className="chicago-ambient-token chicago-ambient-coin chicago-ambient-one">$</span>
         <span className="chicago-ambient-token chicago-ambient-diamond chicago-ambient-two">♦</span>
         <span className="chicago-ambient-token chicago-ambient-star chicago-ambient-three">✦</span>
-        <span className="chicago-ambient-token chicago-ambient-coin chicago-ambient-four">★</span>
+        <span className="chicago-ambient-token chicago-ambient-coin chicago-ambient-four">✦</span>
         <span className="chicago-ambient-token chicago-ambient-diamond chicago-ambient-five">✧</span>
         <span className="chicago-ambient-token chicago-ambient-coin chicago-ambient-six">$</span>
       </div>
 
+      <aside className={`desktop-sidebar ${sidebarCompact ? 'is-compact' : ''}`} aria-label="Navigation principale">
+        <button type="button" className="desktop-sidebar-brand" onClick={() => setPage('popular')} aria-label="Accueil SKINN">
+          <span className="desktop-brand-mark">S</span>
+          <span className="desktop-brand-copy"><strong>SKINN</strong><small>ARCADE</small></span>
+        </button>
+        <div className="desktop-sidebar-label">MENU PRINCIPAL</div>
+        <nav className="desktop-sidebar-nav">
+          {desktopNavigation.map(({ page: targetPage, label, icon: Icon }) => (
+            <button
+              type="button"
+              key={targetPage}
+              onClick={() => setPage(targetPage)}
+              className={`desktop-sidebar-link ${page === targetPage ? 'is-active' : ''}`}
+              title={sidebarCompact ? label : undefined}
+              aria-current={page === targetPage ? 'page' : undefined}
+            >
+              <Icon size={19} />
+              <span>{label}</span>
+              {targetPage === 'coupon' && selections.length > 0 && <b>{selections.length}</b>}
+            </button>
+          ))}
+        </nav>
+        <div className="desktop-sidebar-spacer" />
+        <div className="desktop-sidebar-promo">
+          <Sparkles size={17} />
+          <strong>Prêt à jouer </strong>
+          <span>Découvre les jeux multijoueurs.</span>
+          <button type="button" onClick={() => setPage('games')}>Explorer les jeux</button>
+        </div>
+        <button
+          type="button"
+          className="desktop-sidebar-toggle"
+          onClick={() => setSidebarCompact((compact) => !compact)}
+          aria-label={sidebarCompact ? 'Développer le menu' : 'Réduire le menu'}
+          title={sidebarCompact ? 'Développer le menu' : 'Réduire le menu'}
+        >
+          {sidebarCompact ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          <span>Réduire le menu</span>
+        </button>
+      </aside>
+
       {/* Main Mobile App Container: 440px max width for authentic mobile frame matching the images */}
-      <div className="relative z-10 max-w-[440px] mx-auto min-h-screen flex flex-col pb-28 shadow-2xl overflow-y-auto">
+      <div className="desktop-content-shell relative z-10 w-full max-w-[440px] md:max-w-[900px] xl:max-w-[1200px] 2xl:max-w-[1440px] mx-auto min-h-screen flex flex-col pb-28 shadow-2xl">
         {/* ========================================================
             HEADER BANNER (Minecraft Avatar, Chicago Brand, Balance, Bell, Theme Switcher)
            ======================================================== */}
-        <header className="relative px-4 pt-3 pb-3 flex items-center justify-between overflow-hidden">
+        <header className="desktop-main-header relative px-4 pt-3 pb-3 flex items-center justify-between overflow-hidden">
           {/* Light Theme Background Floating Grass Block */}
           {!isDark && (
             <img
@@ -563,7 +774,7 @@ export default function App() {
           )}
 
           {/* Left: Minecraft Character Avatar */}
-          <div className="relative z-10 flex-shrink-0 cursor-pointer" onClick={() => setPage('account')}>
+          <div className="desktop-avatar relative z-10 flex-shrink-0 cursor-pointer" onClick={() => setPage('account')}>
             <div className="relative w-20 h-20 -my-2 flex items-center justify-center">
               <img
                 src={isDark ? '/images/extracted/avatar-dark.png' : '/images/extracted/avatar-light.png'}
@@ -574,7 +785,7 @@ export default function App() {
           </div>
 
           {/* Center: Chicago graffiti wordmark & Subtitle */}
-          <div className="relative z-10 flex flex-col items-center justify-center text-center px-1">
+          <div className="desktop-wordmark relative z-10 flex flex-col items-center justify-center text-center px-1">
             <ChicagoWordmark className="w-32 h-[54px] -my-1" />
             <span
               className={`text-[9.5px] font-medium tracking-tight mt-0.5 whitespace-nowrap ${
@@ -585,28 +796,58 @@ export default function App() {
             </span>
           </div>
 
+          <div className="desktop-search-box">
+            <Search size={18} aria-hidden="true" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && matchingGames.length) handleLaunchGame(matchingGames[0])
+                else if (event.key === 'Enter' && matchingMatches.length) setPage('coupon')
+              }}
+              placeholder="Rechercher un jeu, une équipe..."
+              aria-label="Rechercher un jeu ou une équipe"
+            />
+            {searchTerm && (
+              <div className="desktop-search-results">
+                {matchingGames.map((game) => (
+                  <button type="button" key={game.id} onClick={() => { handleLaunchGame(game); setSearchQuery('') }}>
+                    <Gamepad2 size={16} /><span>{game.title}</span><small>Jeu</small>
+                  </button>
+                ))}
+                {matchingMatches.map((match) => (
+                  <button type="button" key={match.id} onClick={() => { setPage('coupon'); setSearchQuery('') }}>
+                    <CircleDot size={16} /><span>{match.home} – {match.away}</span><small>Match</small>
+                  </button>
+                ))}
+                {!matchingGames.length && !matchingMatches.length && <p>Aucun résultat</p>}
+              </div>
+            )}
+          </div>
+
           {/* Right: Balance Pill, Notification Bell & Theme Switch */}
           <div className="relative z-10 flex items-center gap-1.5 flex-shrink-0">
             {/* Balance Pill */}
             <div
               onClick={() => setWalletModalOpen(true)}
+              title="CrÃ©dits de dÃ©monstration uniquement â€” aucun paiement rÃ©el"
               className={`flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-2xl cursor-pointer transition-transform active:scale-95 ${
-                isDark
-                  ? 'bg-[#161928] border border-white/10 shadow-sm'
+                isDark ? 'bg-[#161928] border border-white/10 shadow-sm'
                   : 'bg-white border border-slate-100 shadow-sm'
               }`}
             >
               {/* Gold Coin Icon */}
               <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center shadow-inner">
-                <span className="text-[9px] font-black text-amber-900">$</span>
+                <span className="text-[9px] font-black text-amber-900">C</span>
               </div>
               {/* Balance Amount */}
               <span
-                className={`text-xs font-bold leading-none ${
+                className={`text-xs font-bold leading-none ${balancePulse ? 'demo-balance-pulse' : ''} ${
                   isDark ? 'text-white' : 'text-slate-900'
                 }`}
               >
-                {balance.toFixed(2)}
+                {balance.toLocaleString('fr-FR')}
               </span>
               {/* Plus Button */}
               <button
@@ -624,8 +865,7 @@ export default function App() {
               type="button"
               onClick={() => setNotificationsOpen(true)}
               className={`relative w-8 h-8 rounded-xl flex items-center justify-center transition-transform active:scale-95 ${
-                isDark
-                  ? 'bg-[#161928] border border-white/10 text-white'
+                isDark ? 'bg-[#161928] border border-white/10 text-white'
                   : 'bg-white border border-slate-100 text-slate-800 shadow-sm'
               }`}
               title="Notifications"
@@ -643,21 +883,30 @@ export default function App() {
               type="button"
               onClick={toggleTheme}
               className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-95 ${
-                isDark
-                  ? 'bg-[#161928] border border-purple-500/40 text-[#FBBF24] hover:bg-purple-950/40'
+                isDark ? 'bg-[#161928] border border-purple-500/40 text-[#FBBF24] hover:bg-purple-950/40'
                   : 'bg-white border border-purple-200 text-[#6B38FB] shadow-sm hover:bg-purple-50'
               }`}
               title={`Thème actuel : ${theme === 'lime' ? 'Vert citron' : theme === 'dark' ? 'Sombre' : 'Clair'}. Cliquer pour changer`}
             >
               {theme === 'lime' ? <Leaf size={15} /> : isDark ? <Sun size={15} /> : <Moon size={15} />}
             </button>
+            <button
+              type="button"
+              onClick={() => setPage('account')}
+              className="desktop-profile-button"
+              title="Mon compte"
+              aria-label="Mon compte"
+            >
+              <User size={17} />
+            </button>
           </div>
         </header>
 
+        <div className="desktop-page-content">
         {/* ========================================================
             CATEGORY HORIZONTAL PILLS (Populaires, Sports, E-sport, Casino, Jeux)
            ======================================================== */}
-        <div className="px-4 py-1.5 flex items-center gap-2 overflow-x-auto no-scrollbar select-none">
+        <div className="desktop-category-bar px-4 py-1.5 flex items-center gap-2 overflow-x-auto no-scrollbar select-none">
           {[
             { label: 'Populaires', icon: Trophy },
             { label: 'Sports', icon: CircleDot },
@@ -674,9 +923,8 @@ export default function App() {
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 flex-shrink-0 ${
                   isActive
                     ? 'bg-[#6B38FB] text-white shadow-md shadow-purple-600/30'
-                    : isDark
-                    ? 'bg-[#161928] text-slate-300 border border-white/5 hover:bg-[#1f2338]'
-                    : 'bg-white text-slate-700 border border-slate-100 shadow-sm hover:bg-slate-50'
+                    : isDark ? 'bg-[#161928] text-slate-300 border border-white/5 hover:bg-[#1f2338]'
+                      : 'bg-white text-slate-700 border border-slate-100 shadow-sm hover:bg-slate-50'
                 }`}
               >
                 <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
@@ -690,17 +938,17 @@ export default function App() {
             MAIN PAGE CONTENT SWITCHER
            ======================================================== */}
         {page === 'popular' && (
-          <div className="flex flex-col gap-4 px-4 pt-2">
+          <div className="desktop-page desktop-popular-page flex flex-col gap-4 px-4 pt-2">
             {/* ----------------------------------------------------
-                PROMOTIONS CAROUSEL (DÉFILEMENT HORIZONTAL)
+                PROMOTIONS CAROUSEL (DÃ‰FILEMENT HORIZONTAL)
                ---------------------------------------------------- */}
-            <div className="promotion-carousel -mx-4">
+            <div className="promotion-carousel desktop-promotions -mx-4">
               <div className="promotion-track flex w-max items-stretch gap-3 px-4 select-none">
                 {[...promotions, ...promotions].map((promo, index) => (
                 <div
                   key={`${promo.title}-${index}`}
-                  onClick={() => showToast(`Promotion ${promo.title} activée !`)}
-                  className="relative w-[220px] h-[132px] flex-shrink-0 rounded-2xl overflow-hidden cursor-pointer transition-transform active:scale-95 border border-white/10"
+                  onClick={() => showToast(`Promotion ${promo.title} activÃ©e !`)}
+                  className="relative w-[190px] h-[114px] flex-shrink-0 rounded-2xl overflow-hidden cursor-pointer transition-transform active:scale-95 border border-white/10"
                 >
                   <img
                     src={promo.image}
@@ -718,7 +966,7 @@ export default function App() {
             </div>
 
             {/* ----------------------------------------------------
-                SECTION 1: TOP 10 DES PERFORMEURS (DÉFILEMENT HORIZONTAL)
+                SECTION 1: TOP 10 DES PERFORMEURS (DÃ‰FILEMENT HORIZONTAL)
                ---------------------------------------------------- */}
             <section>
               <div className="flex items-center justify-between mb-2.5">
@@ -743,14 +991,18 @@ export default function App() {
               </div>
 
               {/* Performer Cards Horizontal Scroll Container */}
-              <div className="flex items-stretch gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 select-none">
+              <div
+                className="desktop-performer-grid flex items-stretch gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 select-none"
+                onWheel={(event) => {
+                  if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
+                }}
+              >
                 {allTopPerformers.map((player) => (
                   <div
                     key={player.rank}
                     onClick={() => setPage('performance')}
-                    className={`relative w-[130px] flex-shrink-0 p-2.5 rounded-2xl flex flex-col justify-between cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-95 ${
-                      isDark
-                        ? 'bg-[#161928] border border-white/5'
+                    className={`relative w-[136px] flex-shrink-0 p-2.5 rounded-2xl flex flex-col justify-between cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-95 ${
+                      isDark ? 'bg-[#161928] border border-white/5'
                         : 'bg-white border border-slate-100 shadow-sm'
                     }`}
                   >
@@ -766,11 +1018,11 @@ export default function App() {
                     </div>
 
                     {/* Voxel 3D Image (Grass block / Diamond / Creeper) */}
-                    <div className="w-full h-20 flex items-center justify-center mt-2 mb-1">
+                    <div className="w-full h-20 flex items-center justify-center mt-2 mb-1 overflow-hidden rounded-xl bg-slate-900/10">
                       <img
                         src={player.image}
                         alt={player.name}
-                        className="h-[76px] w-[76px] rounded-full object-cover drop-shadow-md ring-2 ring-white/10 select-none"
+                        className="h-full w-full rounded-xl object-contain drop-shadow-md select-none"
                       />
                     </div>
 
@@ -798,7 +1050,7 @@ export default function App() {
             </section>
 
             {/* ----------------------------------------------------
-                SECTION 2: LES JEUX (DÉFILEMENT HORIZONTAL)
+                SECTION 2: LES JEUX (DÃ‰FILEMENT HORIZONTAL)
                ---------------------------------------------------- */}
             <section>
               <div className="flex items-center justify-between mb-2.5">
@@ -814,7 +1066,7 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setPage('invite')}
+                  onClick={() => setPage('games')}
                   className="flex items-center text-xs font-bold text-[#8B5CF6] hover:underline"
                 >
                   <span>Voir tout ({allGames.length})</span>
@@ -823,114 +1075,162 @@ export default function App() {
               </div>
 
               {/* Unique playable games */}
-              <div className="flex items-stretch gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 select-none">
+              <div
+                className="desktop-games-grid flex items-stretch gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 select-none"
+                onWheel={(event) => {
+                  if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
+                }}
+              >
                 {allGames.map((game) => (
-                  <div
+                  <button
+                    type="button"
                     key={game.id}
-                    className={`w-[130px] flex-shrink-0 p-2 rounded-2xl flex flex-col justify-between ${
-                      isDark
-                        ? 'bg-[#161928] border border-white/5'
-                        : 'bg-white border border-slate-100 shadow-sm'
-                    }`}
+                    onClick={() => handleLaunchGame(game)}
+                    aria-label={`Lancer ${game.title}`}
+                    className="game-category-tile"
                   >
-                    {/* Game Artwork */}
-                    <div className="w-full h-20 rounded-xl overflow-hidden bg-slate-900/10">
-                      <img
-                        src={game.image}
-                        alt={game.title}
-                        className="w-full h-full object-cover select-none"
-                      />
-                    </div>
-
-                    {/* Game Title */}
-                    <div
-                      className={`text-center font-bold text-[11px] mt-2 mb-2 truncate ${
-                        isDark ? 'text-white' : 'text-slate-900'
-                      }`}
-                    >
-                      {game.title}
-                    </div>
-
-                    {/* Play Button: "Jouer ▶" */}
-                    <button
-                      type="button"
-                      onClick={() => handleLaunchGame(game)}
-                      className="w-full py-1.5 bg-[#6B38FB] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md shadow-purple-600/30 hover:bg-[#5B2AE8] active:scale-95 transition-all"
-                    >
-                      <span>Jouer</span>
-                      <Play size={10} fill="currentColor" />
-                    </button>
-                  </div>
+                    <img src={game.image} alt="" className="sports-category-image" />
+                    <span className="sports-category-label">{game.title}</span>
+                    <span className="sports-category-status">Jeu disponible</span>
+                  </button>
                 ))}
               </div>
             </section>
 
             {/* ----------------------------------------------------
-                SECTION 3: PARIS ET ACTUALITÉS (DÉFILEMENT HORIZONTAL)
+                SECTION 3: CARTES DE PARIS SPORTIFS
                ---------------------------------------------------- */}
             <section>
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-4 bg-[#8B5CF6] rounded-full" />
+                  <span className="w-1.5 h-4 bg-amber-400 rounded-full" />
                   <h2
                     className={`text-sm font-black tracking-tight ${
                       isDark ? 'text-white' : 'text-slate-900'
                     }`}
                   >
-                    Paris et actualités
+                    Paris sportifs · matchs démo
                   </h2>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setPage('coupon')}
-                  className="flex items-center text-xs font-bold text-[#8B5CF6] hover:underline"
+                  onClick={() => {
+                    setSelectedMatchCategory('all')
+                    setPage('coupon')
+                  }}
+                  className="flex items-center text-xs font-bold text-amber-400 hover:underline"
                 >
-                  <span>Voir tout ({allMatchesList.length})</span>
+                  <span>Ouvrir le coupon ({selections.length})</span>
                   <ChevronRight size={14} />
                 </button>
               </div>
 
-              {/* All Matches Horizontal Scroll Container */}
-              <div className="flex items-stretch gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 select-none">
-                {allMatchesList.map((match) => (
-                  <div
-                    key={match.id}
-                    onClick={() => {
-                      handleToggleBet(match, 'V1', match.home, match.homeOdds)
-                    }}
-                    className="relative w-[220px] flex-shrink-0 h-28 rounded-2xl overflow-hidden cursor-pointer group shadow-sm"
-                  >
-                    {/* Background image */}
-                    <img
-                      src={match.image}
-                      alt={match.league}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 select-none"
-                    />
-
-                    {/* Subtle gradient vignette */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/20" />
-
-                    {/* Bottom-left Glassy Location Pill */}
-                    <div className="absolute bottom-2 left-2 z-10 glass-pill px-2 py-1 rounded-full flex items-center gap-1 text-[9px] font-bold text-white shadow">
-                      <MapPin size={10} className="text-white" />
-                      <span className="truncate max-w-[140px]">{match.league}</span>
-                    </div>
-
-                    {/* Bet badge top right */}
-                    <div className="absolute top-2 right-2 z-10">
-                      <span className="bg-[#6B38FB] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow">
-                        V1: {match.homeOdds}
-                      </span>
-                    </div>
-
-                    {/* Match VS Title */}
-                    <div className="absolute top-2 left-2 z-10 text-[10px] font-extrabold text-white max-w-[130px] truncate drop-shadow">
-                      {match.home} vs {match.away}
-                    </div>
-                  </div>
-                ))}
+              <p className="mb-2 text-[10px] text-slate-400">
+                Touchez une cote pour l&apos;ajouter au coupon. Rencontres fictives · crédits de démo uniquement · aucun paiement réel.
+              </p>
+              <div className="sports-betting-cards no-scrollbar">
+                {sportsbookMatches.map((match) => {
+                  const options = [
+                    ['V1', match.home, match.homeOdds],
+                    ['X', 'Nul', match.drawOdds],
+                    ['V2', match.away, match.awayOdds],
+                  ] as const
+                  return (
+                    <article
+                      key={match.id}
+                      className={`sports-betting-card ${isDark ? 'sports-betting-card-dark' : 'sports-betting-card-light'}`}
+                    >
+                      <img className="sports-betting-card-art" src={match.image} alt="" />
+                      <div className="sports-betting-card-content">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[10px] font-bold text-slate-400">{match.league}</span>
+                          <span className="shrink-0 rounded-full bg-sky-400/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-400">
+                            {betCategories.find(({ id }) => id === match.category)?.label ?? 'Match'}
+                          </span>
+                        </div>
+                        <div className="my-3 flex items-center justify-between gap-2 text-xs font-extrabold">
+                          <span className="min-w-0 flex-1 truncate text-right">{match.home}</span>
+                          <span className="shrink-0 text-[10px] text-slate-500">VS</span>
+                          <span className="min-w-0 flex-1 truncate">{match.away}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {options.map(([option, label, odds]) => {
+                            const selected = selections.some((selection) => selection.matchId === match.id && selection.option === option)
+                            return (
+                              <button
+                                type="button"
+                                key={option}
+                                onClick={() => handleToggleBet(match, option, label, odds)}
+                                aria-pressed={selected}
+                                aria-label={`${match.home} contre ${match.away}, ${option} ${label}, cote ${odds.toFixed(2)}`}
+                                className={`rounded-lg border px-1.5 py-2 text-center transition-colors ${
+                                  selected ? 'border-amber-400 bg-amber-400/20 text-amber-300'
+                                    : isDark ? 'border-white/10 bg-white/[0.04] hover:border-sky-400/60'
+                                      : 'border-slate-200 bg-white hover:border-sky-400'
+                                }`}
+                              >
+                                <span className="block truncate text-[9px] font-semibold text-slate-400">{option} · {label}</span>
+                                <span className="mt-0.5 block text-xs font-black text-amber-400">{odds.toFixed(2)}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
               </div>
             </section>
+
+            <PublicRooms onJoin={joinPublicRoom} onWalletBalance={updateDemoBalance} />
+          </div>
+        )}
+
+        {page === 'games' && (
+          <div className="desktop-page desktop-games-page flex flex-col gap-4 px-4 pt-3">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setPage('popular')}
+                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-[#8B5CF6]"
+              >
+                â† Retour
+              </button>
+              <span className="text-xs font-bold text-slate-400">{allGames.length} jeux</span>
+            </div>
+            <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Tous les jeux</h1>
+            <div
+              className="desktop-games-catalog no-scrollbar grid grid-cols-2 gap-3 sm:grid-cols-3"
+              onWheel={(event) => {
+                if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
+              }}
+            >
+              {allGames.map((game) => (
+                <article
+                  key={game.id}
+                  className={`rounded-2xl p-2 ${
+                    isDark ? 'bg-[#161928] border border-white/5'
+                      : 'bg-white border border-slate-100 shadow-sm'
+                  }`}
+                >
+                  <img
+                    src={game.image}
+                    alt={game.title}
+                    className="h-28 w-full rounded-xl bg-slate-900/10 object-cover"
+                  />
+                  <h2 className={`mt-2 truncate text-center text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {game.title}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchGame(game)}
+                    className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-[#6B38FB] py-2 text-xs font-bold text-white"
+                  >
+                    Jouer <Play size={11} fill="currentColor" />
+                  </button>
+                </article>
+              ))}
+            </div>
           </div>
         )}
 
@@ -938,7 +1238,7 @@ export default function App() {
             PAGE 2: PERFORMANCES
            ======================================================== */}
         {page === 'performance' && (
-          <div className="flex flex-col gap-4 px-4 pt-2">
+          <div className="desktop-page flex flex-col gap-4 px-4 pt-2">
             <div className="flex items-center gap-2 mb-1">
               <span className="w-1.5 h-5 bg-[#8B5CF6] rounded-full" />
               <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -953,7 +1253,7 @@ export default function App() {
               }`}
             >
               <div>
-                <span className="text-xs text-slate-400 font-semibold">Gains cumulés</span>
+                <span className="text-xs text-slate-400 font-semibold">Gains cumulÃ©s</span>
                 <div className={`text-xl font-black ${isDark ? 'text-[#FACC15]' : 'text-[#6B38FB]'}`}>
                   +2 450 000 XOF
                 </div>
@@ -1003,12 +1303,18 @@ export default function App() {
             PAGE 3: COUPON
            ======================================================== */}
         {page === 'coupon' && (
-          <div className="flex flex-col gap-4 px-4 pt-2">
+          <div className="desktop-page flex flex-col gap-4 px-4 pt-2">
             <div className="flex items-center gap-2 mb-1">
               <span className="w-1.5 h-5 bg-[#8B5CF6] rounded-full" />
               <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Coupon de Paris
               </h1>
+            </div>
+            <div className={`rounded-xl border px-3 py-2 text-[11px] ${
+            isDark ? 'border-sky-400/20 bg-sky-400/[0.06] text-sky-200' : 'border-sky-200 bg-sky-50 text-sky-800'
+            }`}>
+            Mode démo uniquement · solde : {balance.toLocaleString('fr-FR')} crédits ·             Connexion {sportsbookConnected ? 'active' : 'indisponible'}.
+            Les événements sont fictifs, aucun résultat/règlement n&apos;est connecté, et tout reste en crédits démo.
             </div>
 
             {/* Active Selections Card */}
@@ -1019,7 +1325,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Sélections en cours ({selections.length})
+                  SÃ©lections en cours ({selections.length})
                 </span>
                 {selections.length > 0 && (
                   <button
@@ -1034,8 +1340,7 @@ export default function App() {
 
               {selections.length === 0 ? (
                 <div className="py-6 text-center text-slate-400 text-xs">
-                  Aucun match sélectionné. Cliquez sur un match dans &quot;Paris et actualités&quot; pour
-                  l&apos;ajouter au coupon.
+                  Aucun match sélectionné. Choisissez une issue ci-dessous pour l&apos;ajouter au coupon.
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 mb-4">
@@ -1069,17 +1374,88 @@ export default function App() {
                 </div>
               )}
 
+              <div className="border-t border-slate-700/20 pt-3">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Événements disponibles
+                  </span>
+                  <select
+                    aria-label="Filtrer les événements par catégorie"
+                    value={selectedMatchCategory}
+                    onChange={(event) => setSelectedMatchCategory(event.target.value as Match['category'] | 'all')}
+                    className={`max-w-[52%] rounded-lg border px-2 py-1.5 text-xs font-bold ${
+                      isDark ? 'border-slate-700 bg-[#0B0D19] text-white'
+                        : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  >
+                    <option value="all">Toutes les catégories</option>
+                    {betCategories.map(({ id, label }) => (
+                      <option key={id} value={id}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {visibleMatches.map((match) => (
+                    <div
+                      key={match.id}
+                      className={`rounded-xl border p-3 ${
+                        isDark ? 'border-white/5 bg-[#0B0D19]/60' : 'border-slate-100 bg-slate-50'
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="truncate text-[10px] font-semibold text-slate-400">{match.league}</span>
+                        <span className="shrink-0 rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-400">
+                          {betCategories.find(({ id }) => id === match.category)?.label ?? 'Match'}
+                        </span>
+                      </div>
+                      <div className="mb-3 text-xs font-extrabold">
+                        {match.home} <span className="text-slate-400">vs</span> {match.away}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          ['V1', match.home, match.homeOdds],
+                          ['X', 'Nul', match.drawOdds],
+                          ['V2', match.away, match.awayOdds],
+                        ] as const).map(([option, label, odds]) => {
+                          const isSelected = selections.some((selection) => selection.matchId === match.id && selection.option === option)
+                          return (
+                            <button
+                              type="button"
+                              key={option}
+                              onClick={() => handleToggleBet(match, option, label, odds)}
+                              aria-pressed={isSelected}
+                              className={`rounded-lg border px-2 py-2 text-left transition-colors ${
+                                isSelected ? 'border-amber-400/60 bg-amber-400/15 text-amber-300'
+                                  : isDark ? 'border-white/10 bg-white/[0.03] hover:border-amber-400/40'
+                                    : 'border-slate-200 bg-white hover:border-amber-400/60'
+                              }`}
+                            >
+                              <span className="block text-[9px] font-bold text-slate-400">{option}</span>
+                              <span className="block truncate text-[10px] font-semibold">{label}</span>
+                              <span className="block text-[11px] font-black text-amber-400">{odds.toFixed(2)}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Stake and Potential Win */}
               <div className="border-t border-slate-700/20 pt-3 flex flex-col gap-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-medium">Mise (XOF)</span>
+                  <span className="text-slate-400 font-medium">Mise (crédits démo)</span>
                   <input
                     type="number"
+                    min={50}
+                    max={10_000}
+                    step={50}
                     value={stake}
                     onChange={(e) => setStake(e.target.value)}
+                    aria-label="Mise en crédits de démonstration"
                     className={`w-28 text-right font-bold py-1 px-2 rounded-lg text-xs border ${
-                      isDark
-                        ? 'bg-[#0B0D19] border-slate-700 text-white'
+                      isDark ? 'bg-[#0B0D19] border-slate-700 text-white'
                         : 'bg-white border-slate-200 text-slate-900'
                     }`}
                   />
@@ -1093,11 +1469,9 @@ export default function App() {
                       key={val}
                       onClick={() => setStake(val)}
                       className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-colors ${
-                        stake === val
-                          ? 'bg-[#6B38FB] text-white'
-                          : isDark
-                          ? 'bg-[#0B0D19] text-slate-400 hover:text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        stake === val ? 'bg-[#6B38FB] text-white'
+                          : isDark ? 'bg-[#0B0D19] text-slate-400 hover:text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       {val}
@@ -1108,20 +1482,20 @@ export default function App() {
                 <div className="flex items-center justify-between text-xs font-bold mt-1">
                   <span className="text-slate-400">Gain potentiel:</span>
                   <span className={`text-sm ${isDark ? 'text-[#FACC15]' : 'text-[#6B38FB]'}`}>
-                    {Math.round(
+                    {Math.floor(
                       (Number(stake) || 0) * selections.reduce((a, b) => a * b.odds, 1),
                     ).toLocaleString('fr-FR')}{' '}
-                    XOF
+                    crédits
                   </span>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleValidateCoupon}
-                  disabled={!selections.length}
+                  disabled={!selections.length || !sportsbookConnected || couponSubmitting}
                   className="w-full mt-2 py-2.5 rounded-xl font-bold text-xs bg-[#6B38FB] text-white disabled:opacity-50 shadow-md shadow-purple-600/30 hover:bg-[#5B2AE8] active:scale-95 transition-all"
                 >
-                  Valider le coupon
+                  {couponSubmitting ? 'Validation…' : 'Valider le coupon démo'}
                 </button>
               </div>
             </div>
@@ -1135,6 +1509,11 @@ export default function App() {
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
                 Historique des coupons ({history.length})
               </span>
+              {history.length === 0 && (
+                <p className="py-3 text-center text-xs text-slate-400">
+                  Aucun coupon démo pour ce portefeuille.
+                </p>
+              )}
               {history.map((coupon) => (
                 <div
                   key={coupon.id}
@@ -1144,25 +1523,30 @@ export default function App() {
                 >
                   <div>
                     <div className="text-xs font-bold">{coupon.id}</div>
-                    <div className="text-[10px] text-slate-400">{coupon.createdAt}</div>
+                    <div className="text-[10px] text-slate-400">
+                      {new Date(coupon.createdAt).toLocaleString('fr-FR')}
+                    </div>
                     <div className="text-[11px] font-semibold mt-0.5">
-                      Mise: {coupon.stake} XOF →{' '}
+                      Mise: {coupon.stake.toLocaleString('fr-FR')} crédits · cote {coupon.combinedOdds?.toFixed(2) ?? coupon.selections.reduce((total, selection) => total * selection.odds, 1).toFixed(2)} · gain potentiel:{' '}
                       <span className={isDark ? 'text-[#FACC15]' : 'text-[#6B38FB]'}>
-                        {coupon.potential} XOF
+                        {coupon.potential.toLocaleString('fr-FR')} crédits
                       </span>
+                    </div>
+                    <div className="mt-1 text-[10px] text-slate-400">
+                      {coupon.selections.map((selection) =>
+                        `${selection.matchTitle}: ${selection.option} ${selection.selection} @${selection.odds.toFixed(2)}`,
+                      ).join(' · ')}
                     </div>
                   </div>
                   <div>
                     <span
                       className={`text-[10px] font-bold px-2 py-1 rounded-full ${
-                        coupon.status === 'won'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : coupon.status === 'lost'
-                          ? 'bg-red-500/20 text-red-400'
-                          : 'bg-amber-500/20 text-amber-400'
+                        coupon.status === 'won' ? 'bg-emerald-500/20 text-emerald-400'
+                          : coupon.status === 'lost' ? 'bg-red-500/20 text-red-400'
+                            : 'bg-amber-500/20 text-amber-400'
                       }`}
                     >
-                      {coupon.status === 'won' ? 'Gagné' : coupon.status === 'lost' ? 'Perdu' : 'En cours'}
+                      {coupon.status === 'won' ? 'Gagné' : coupon.status === 'lost' ? 'Perdu' : 'En attente'}
                     </span>
                   </div>
                 </div>
@@ -1172,14 +1556,14 @@ export default function App() {
         )}
 
         {/* ========================================================
-            PAGE 4: INVITER (DÉFIS 1 CONTRE 1)
+            PAGE 4: INVITER (DÃ‰FIS 1 CONTRE 1)
            ======================================================== */}
         {page === 'invite' && (
-          <div className="flex flex-col gap-4 px-4 pt-2">
+          <div className="desktop-page flex flex-col gap-4 px-4 pt-2">
             <div className="flex items-center gap-2 mb-1">
               <span className="w-1.5 h-5 bg-[#8B5CF6] rounded-full" />
               <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Défis & Invitations 1v1
+                DÃ©fis & Invitations 1v1
               </h1>
             </div>
 
@@ -1191,7 +1575,7 @@ export default function App() {
               }`}
             >
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Lancer un défi
+                Lancer un dÃ©fi
               </span>
 
               <div>
@@ -1204,8 +1588,7 @@ export default function App() {
                   value={invitePlayer}
                   onChange={(e) => setInvitePlayer(e.target.value)}
                   className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border ${
-                    isDark
-                      ? 'bg-[#0B0D19] border-slate-700 text-white'
+                    isDark ? 'bg-[#0B0D19] border-slate-700 text-white'
                       : 'bg-slate-50 border-slate-200 text-slate-900'
                   }`}
                 />
@@ -1218,8 +1601,7 @@ export default function App() {
                     value={selectedInviteGame}
                     onChange={(e) => setSelectedInviteGame(e.target.value)}
                     className={`w-full py-2 px-2 rounded-xl text-xs font-semibold border ${
-                      isDark
-                        ? 'bg-[#0B0D19] border-slate-700 text-white'
+                      isDark ? 'bg-[#0B0D19] border-slate-700 text-white'
                         : 'bg-slate-50 border-slate-200 text-slate-900'
                     }`}
                   >
@@ -1238,8 +1620,7 @@ export default function App() {
                     value={inviteStake}
                     onChange={(e) => setInviteStake(e.target.value)}
                     className={`w-full py-2 px-3 rounded-xl text-xs font-bold border ${
-                      isDark
-                        ? 'bg-[#0B0D19] border-slate-700 text-white'
+                      isDark ? 'bg-[#0B0D19] border-slate-700 text-white'
                         : 'bg-slate-50 border-slate-200 text-slate-900'
                     }`}
                   />
@@ -1251,7 +1632,7 @@ export default function App() {
                 className="w-full py-2.5 rounded-xl font-bold text-xs bg-[#6B38FB] text-white shadow-md shadow-purple-600/30 hover:bg-[#5B2AE8] active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 <Swords size={14} />
-                <span>Envoyer le défi</span>
+                <span>Envoyer le dÃ©fi</span>
               </button>
             </form>
 
@@ -1262,7 +1643,7 @@ export default function App() {
               }`}
             >
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                Défis reçus en attente ({incomingInvites.filter((i) => i.status === 'pending').length})
+                DÃ©fis reÃ§us en attente ({incomingInvites.filter((i) => i.status === 'pending').length})
               </span>
               {incomingInvites
                 .filter((i) => i.status === 'pending')
@@ -1276,7 +1657,7 @@ export default function App() {
                     <div>
                       <div className="font-bold text-xs">{inv.player}</div>
                       <div className="text-[10px] text-slate-400">
-                        {inv.game} • {inv.stake} XOF
+                        {inv.game} â€¢ {inv.stake} XOF
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -1286,7 +1667,7 @@ export default function App() {
                           setIncomingInvites((prev) =>
                             prev.map((i) => (i.id === inv.id ? { ...i, status: 'accepted' } : i)),
                           )
-                          showToast(`Défi accepté ! Lancement de ${inv.game}...`)
+                          showToast(`DÃ©fi acceptÃ© ! Lancement de ${inv.game}...`)
                           const game = allGames.find((candidate) => candidate.title === inv.game)
                           if (game) handleLaunchGame(game)
                         }}
@@ -1300,7 +1681,7 @@ export default function App() {
                           setIncomingInvites((prev) =>
                             prev.map((i) => (i.id === inv.id ? { ...i, status: 'refused' } : i)),
                           )
-                          showToast('Défi refusé.')
+                          showToast('DÃ©fi refusÃ©.')
                         }}
                         className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-red-600/80 text-white hover:bg-red-700"
                       >
@@ -1319,7 +1700,7 @@ export default function App() {
                 }`}
               >
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Défis envoyés ({sentInvites.length})
+                  DÃ©fis envoyÃ©s ({sentInvites.length})
                 </span>
                 {sentInvites.map((inv) => (
                   <div
@@ -1329,9 +1710,9 @@ export default function App() {
                     }`}
                   >
                     <div>
-                      <div className="font-bold text-xs">À: {inv.player}</div>
+                      <div className="font-bold text-xs">Ã€: {inv.player}</div>
                       <div className="text-[10px] text-slate-400">
-                        {inv.game} • {inv.stake} XOF
+                        {inv.game} â€¢ {inv.stake} XOF
                       </div>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">
@@ -1348,7 +1729,7 @@ export default function App() {
             PAGE 5: COMPTE & CARTES DE SOLDE (CARROUSEL DE CARTES)
            ======================================================== */}
         {page === 'account' && (
-          <div className="flex flex-col gap-4 px-4 pt-2">
+          <div className="desktop-page account-page flex flex-col gap-4 px-4 pt-2">
             <div className="flex items-center gap-2 mb-1">
               <span className="w-1.5 h-5 bg-[#8B5CF6] rounded-full" />
               <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -1357,7 +1738,9 @@ export default function App() {
             </div>
 
             {/* User Profile Overview */}
-            <div className="flex items-center gap-3">
+            <div className={`account-profile flex items-center gap-3 rounded-2xl p-4 ${
+              isDark ? 'bg-[#161928] border border-white/5' : 'bg-white shadow-sm border border-slate-100'
+            }`}>
               <div className="w-12 h-12 rounded-2xl overflow-hidden bg-purple-600/20 flex items-center justify-center p-1 border border-purple-500/30">
                 <img
                   src={isDark ? '/images/extracted/avatar-dark.png' : '/images/extracted/avatar-light.png'}
@@ -1367,26 +1750,15 @@ export default function App() {
               </div>
               <div>
                 <h3 className="font-black text-sm">Champion Player</h3>
-                <span className="text-[10px] text-purple-500 font-bold">ID: #GA-89214 • Rang VIP Platine</span>
+                <span className="text-[10px] text-purple-500 font-bold">ID: #GA-89214 â€¢ Rang VIP Platine</span>
               </div>
             </div>
 
             {/* Soldes du compte */}
-            <div>
+            <div className="account-balances">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mes soldes</span>
-              <div className="mt-2 grid gap-2">
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
-                  <div className="flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-full bg-red-500/15 text-red-500 flex items-center justify-center">
-                      <Minus size={18} strokeWidth={3} />
-                    </span>
-                    <span className="text-sm font-bold text-red-500">Retrait</span>
-                  </div>
-                  <span className="text-sm font-black text-red-500">
-                    −{withdrawalBalance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} XOF
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-sky-400/10 border border-sky-400/25">
+              <div className="account-balance-grid mt-2 grid gap-2">
+                <div className="account-balance-card account-balance-primary flex items-center justify-between p-3 rounded-2xl bg-sky-400/10 border border-sky-400/25">
                   <span className={`text-sm font-bold ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
                     Solde du compte
                   </span>
@@ -1394,7 +1766,18 @@ export default function App() {
                     {balance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} XOF
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-lime-400/10 border border-lime-400/25">
+                <div className="account-balance-card flex items-center justify-between p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-full bg-red-500/15 text-red-500 flex items-center justify-center">
+                      <Minus size={18} strokeWidth={3} />
+                    </span>
+                    <span className="text-sm font-bold text-red-500">Retrait</span>
+                  </div>
+                  <span className="text-sm font-black text-red-500">
+                    âˆ’{withdrawalBalance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} XOF
+                  </span>
+                </div>
+                <div className="account-balance-card flex items-center justify-between p-3 rounded-2xl bg-lime-400/10 border border-lime-400/25">
                   <span className={`text-sm font-bold ${isDark ? 'text-lime-400' : 'text-lime-700'}`}>
                     Solde bonus
                   </span>
@@ -1406,7 +1789,7 @@ export default function App() {
             </div>
 
             {/* Quick Actions (Recharger / Retirer) */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="account-actions grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setWalletModalOpen(true)}
@@ -1417,10 +1800,9 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => showToast('Demande de retrait démo initiée.')}
+                onClick={() => showToast('Demande de retrait dÃ©mo initiÃ©e.')}
                 className={`py-3 px-4 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
-                  isDark
-                    ? 'bg-[#161928] border-white/10 text-white hover:bg-[#1f2338]'
+                  isDark ? 'bg-[#161928] border-white/10 text-white hover:bg-[#1f2338]'
                     : 'bg-white border-slate-200 text-slate-800 shadow-sm hover:bg-slate-50'
                 }`}
               >
@@ -1431,9 +1813,8 @@ export default function App() {
 
             {/* Settings & Extra Options */}
             <div
-              className={`rounded-2xl divide-y ${
-                isDark
-                  ? 'bg-[#161928] border border-white/5 divide-slate-800'
+              className={`account-settings rounded-2xl divide-y ${
+                isDark ? 'bg-[#161928] border border-white/5 divide-slate-800'
                   : 'bg-white shadow-sm border border-slate-100 divide-slate-100'
               }`}
             >
@@ -1451,7 +1832,7 @@ export default function App() {
                     <Moon size={16} className="text-[#6B38FB]" />
                   )}
                   <span>
-                    Thème : {theme === 'lime' ? 'Vert citron' : theme === 'dark' ? 'Sombre' : 'Clair'}
+                    ThÃ¨me : {theme === 'lime' ? 'Vert citron' : theme === 'dark' ? 'Sombre' : 'Clair'}
                   </span>
                 </div>
                 <span className="text-[10px] text-purple-500">Basculer</span>
@@ -1502,9 +1883,8 @@ export default function App() {
             BOTTOM NAVIGATION BAR (Paris, Performances, Coupon, Inviter, Compte)
            ======================================================== */}
         <nav
-          className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[440px] z-50 px-3 py-1 flex items-center justify-around select-none transition-colors duration-200 ${
-            isDark
-              ? 'bg-[#0E101A] border-t border-[#1C2035]'
+          className={`desktop-bottom-nav fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[440px] md:max-w-[900px] xl:max-w-[1200px] 2xl:max-w-[1440px] z-50 px-3 py-1 flex items-center justify-around select-none transition-colors duration-200 ${
+            isDark ? 'bg-[#0E101A] border-t border-[#1C2035]'
               : 'bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]'
           }`}
         >
@@ -1619,6 +1999,7 @@ export default function App() {
             </span>
           </button>
         </nav>
+        </div>
 
         {/* ========================================================
             MODAL: WALLET RECHARGE
@@ -1633,7 +2014,7 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wallet size={18} className="text-purple-500" />
-                  <h3 className="font-black text-sm">Recharger le Portefeuille</h3>
+                  <h3 className="font-black text-sm">Crédits de démonstration</h3>
                 </div>
                 <button
                   type="button"
@@ -1644,54 +2025,19 @@ export default function App() {
                 </button>
               </div>
 
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block mb-1">Montant à recharger</span>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
-                    className={`w-full py-2.5 px-3 rounded-xl font-black text-base border ${
-                      isDark
-                        ? 'bg-[#0B0D19] border-slate-700 text-white'
-                        : 'bg-slate-50 border-slate-200 text-slate-900'
-                    }`}
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">XOF</span>
-                </div>
+              <div className={`rounded-2xl p-4 text-center ${isDark ? 'bg-[#0B0D19]' : 'bg-slate-50'}`}>
+                <strong className="block text-2xl font-black">{balance.toLocaleString('fr-FR')}</strong>
+                <span className="text-xs text-slate-400">crédits de démonstration</span>
               </div>
-
-              {/* Quick Deposit Chips */}
-              <div className="grid grid-cols-4 gap-1.5">
-                {['10.00', '25.00', '50.00', '100.00'].map((amt) => (
-                  <button
-                    type="button"
-                    key={amt}
-                    onClick={() => setDepositAmount(amt)}
-                    className={`py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                      depositAmount === amt
-                        ? 'bg-[#6B38FB] text-white border-transparent'
-                        : isDark
-                        ? 'bg-[#0B0D19] border-slate-700 text-slate-300'
-                        : 'bg-slate-100 border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    +{amt}
-                  </button>
-                ))}
-              </div>
-
+              <p className="text-xs leading-relaxed text-slate-400">
+                Ces crédits fictifs servent uniquement aux parties. Aucun dépôt, retrait ou paiement réel n’est possible.
+              </p>
               <button
                 type="button"
-                onClick={() => {
-                  const added = Number(depositAmount) || 0
-                  setBalance((prev) => prev + added)
-                  setWalletModalOpen(false)
-                  showToast(`Portefeuille rechargé de +${added.toFixed(2)} XOF !`)
-                }}
+                onClick={() => setWalletModalOpen(false)}
                 className="w-full py-3 rounded-xl font-bold text-xs bg-[#6B38FB] text-white shadow-lg shadow-purple-600/30 hover:bg-[#5B2AE8] active:scale-95 transition-all mt-1"
               >
-                Confirmer la recharge
+                Fermer
               </button>
             </div>
           </div>
@@ -1732,7 +2078,7 @@ export default function App() {
                     <span className="text-[10px] text-slate-400">Il y a 5 min</span>
                   </div>
                   <p className="text-xs text-slate-300">
-                    Votre solde démo de 19.00 XOF a été crédité avec succès ! Profitez des jeux du moment.
+                    CrÃ©dits de dÃ©monstration uniquement. Aucun dÃ©pÃ´t, retrait ou paiement rÃ©el nâ€™est effectuÃ©.
                   </p>
                 </div>
 
@@ -1742,11 +2088,11 @@ export default function App() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-amber-500">Nouveau Défi Reçu</span>
+                    <span className="font-bold text-xs text-amber-500">Nouveau DÃ©fi ReÃ§u</span>
                     <span className="text-[10px] text-slate-400">Il y a 20 min</span>
                   </div>
                   <p className="text-xs text-slate-300">
-                    Astra Void vous a invité pour un duel Basketball Stars (Mise : 500 XOF).
+                    Astra Void vous a invitÃ© pour un duel Basketball Stars (Mise : 500 XOF).
                   </p>
                 </div>
               </div>
@@ -1756,7 +2102,7 @@ export default function App() {
                 onClick={() => {
                   setNotificationsCount(0)
                   setNotificationsOpen(false)
-                  showToast('Toutes les notifications ont été marquées comme lues.')
+                  showToast('Toutes les notifications ont Ã©tÃ© marquÃ©es comme lues.')
                 }}
                 className="w-full py-2.5 rounded-xl font-bold text-xs bg-slate-500/20 hover:bg-slate-500/30 text-slate-300 active:scale-95 transition-all mt-1"
               >

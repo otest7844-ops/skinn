@@ -8,6 +8,25 @@
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
 
+.mosswing-result-panel > .mosswing-status {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+  padding: 0.7rem 0.85rem;
+  font-weight: 800;
+}
+
+.mosswing-result-panel > .mosswing-status.is-win {
+  border-color: rgba(87, 231, 138, 0.55);
+  background: rgba(23, 115, 65, 0.5);
+  color: #b7ffd1 !important;
+}
+
+.mosswing-result-panel > .mosswing-status.is-loss {
+  border-color: rgba(255, 112, 112, 0.45);
+  background: rgba(130, 35, 44, 0.42);
+  color: #ffc1c1 !important;
+}
+
 .mosswing-frame {
   position: absolute;
   z-index: 0;
@@ -314,7 +333,7 @@
 
 .mosswing-join-form {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   gap: 0.55rem;
 }
 
@@ -564,8 +583,37 @@
   padding: 1rem;
 }
 
+.mosswing-result-shade.is-win {
+  background: rgba(5, 76, 43, 0.78);
+}
+
+.mosswing-result-shade.is-loss {
+  background: rgba(91, 20, 28, 0.78);
+}
+
 .mosswing-result-panel {
+  position: relative;
   margin: auto;
+}
+
+.mosswing-result-shade.is-win .mosswing-result-panel {
+  border-color: rgba(87, 231, 138, 0.55);
+  box-shadow: 0 0 36px rgba(48, 223, 127, 0.3);
+  animation: mosswingWinReveal 550ms cubic-bezier(.2, 1.4, .45, 1) both;
+}
+
+.mosswing-result-shade.is-loss .mosswing-result-panel {
+  border-color: rgba(255, 112, 112, 0.4);
+  animation: mosswingLossNod 520ms ease-in-out both;
+}
+
+.mosswing-result-shade.is-win .mosswing-result-panel::after {
+  position: absolute;
+  top: -1.5rem;
+  right: 1.25rem;
+  content: "🪙";
+  font-size: 1.5rem;
+  animation: mosswingCoinDrop 900ms ease-in both;
 }
 
 .mosswing-result-panel h1 {
@@ -636,6 +684,24 @@
 
 @keyframes mosswing-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes mosswingWinReveal {
+  0% { opacity: 0; transform: translateY(14px) scale(0.9); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes mosswingLossNod {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  30% { transform: translateX(-6px) rotate(-1deg); }
+  65% { transform: translateX(5px) rotate(1deg); }
+}
+
+@keyframes mosswingCoinDrop {
+  0% { opacity: 0; transform: translateY(0) rotate(-35deg); }
+  25% { opacity: 1; }
+  82% { transform: translateY(3.2rem) rotate(25deg); }
+  100% { opacity: 0; transform: translateY(3.5rem) rotate(0); }
 }
 
 @media (max-width: 480px) {

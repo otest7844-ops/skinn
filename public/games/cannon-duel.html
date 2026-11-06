@@ -25,7 +25,7 @@ addEventListener('resize',rs);rs();
 const gx=f=>ox+f*GW, CD=1.1;
 let mode=1,state='menu',speed=1,players=[],bullets=[],parts=[],shake=0,winner=-1;
 const C=[['#3b63d6','#2b49ac','#1a2b73'],['#e03a47','#b72733','#7a1520']];
-function init(){speed=1;bullets=[];parts=[];winner=-1;players=[0,1].map(i=>({i,hp:3,cd:0,ph:Math.random()*6,fl:0,tol:50}))}
+function init(){speed=1;bullets=[];parts=[];winner=-1;players=[0,1].map(i=>({i,hp:20,cd:0,ph:Math.random()*6,fl:0,tol:50}))}
 const pos=p=>p.i?{x:gx(.76),y:H*.84}:{x:gx(.76),y:H*.23};
 function base(p){const a=pos(p),b=pos(players[1-p.i]);return Math.atan2(b.y-a.y,b.x-a.x)}
 const ang=p=>(p.i?3.737:2.546)+Math.sin(p.ph)*1.095;
@@ -76,7 +76,9 @@ function draw(){
  for(const q of parts){x.globalAlpha=Math.max(0,q.l/q.m);x.fillStyle=q.c;x.beginPath();x.arc(q.x,q.y,q.r*(q.vx||q.vy?1:q.l/q.m+.3),0,7);x.fill()}x.globalAlpha=1;
  for(const b of bullets){x.save();x.translate(b.x,b.y);x.rotate(Math.atan2(b.vy,b.vx));x.lineWidth=3.5*U;x.strokeStyle='#7a1500';x.fillStyle='#ffa000';rr(-15*U,-10*U,30*U,20*U,10*U);x.fill();x.stroke();x.fillStyle='#ffe066';rr(-9*U,-6*U,14*U,6*U,3*U);x.fill();x.restore()}
  for(const p of players){const cy=H*(p.i?.7:.295),px=gx(0)+14*U;x.fillStyle='#fff';rr(px,cy-54*U,33*U,108*U,16*U);x.fill();
-  for(let k=0;k<3;k++){const al=k<p.hp;heart(px+16.5*U,cy+(k-1)*32*U,9*U,al?(p.i?'#ff4560':'#1ec8ff'):(p.i?'#7a1530':'#0f3f78'),p.i?'#8a1b2c':'#0b3c78')}}
+  const barTop=cy-47*U,barHeight=94*U,segmentHeight=barHeight/20;
+  for(let k=0;k<20;k++){const active=k<p.hp,segmentY=barTop+barHeight-(k+1)*segmentHeight;x.fillStyle=active?(p.i?'#ff4560':'#1ec8ff'):(p.i?'#7a1530':'#0f3f78');rr(px+7*U,segmentY+1*U,19*U,Math.max(1,segmentHeight-2*U),2*U);x.fill()}
+  x.fillStyle=p.i?'#8a1b2c':'#0b3c78';x.font='bold '+11*U+'px Arial';x.textAlign='center';x.fillText(p.hp+'/20',px+16.5*U,cy+67*U)}
  const pb=pauseRect();x.fillStyle='#fff';rr(pb.x,pb.y,pb.w+20,pb.h,16*U);x.fill();x.fillStyle='#35d52c';rr(pb.x+5*U,pb.y+5*U,pb.w+20,pb.h-10*U,12*U);x.fill();
  x.save();x.translate(pb.x+pb.w/2+1*U,pb.y+pb.h/2);x.rotate(-Math.PI/2);x.font=`900 ${18*U}px Arial Black,Arial`;x.textAlign='center';x.textBaseline='middle';x.lineWidth=4*U;x.strokeStyle='#0b2a4a';x.strokeText('PAUSE',0,0);x.fillStyle='#fff';x.fillText('PAUSE',0,0);x.restore();
  x.restore()}

@@ -21,19 +21,20 @@ npm run server
 
 ## Arcade duels
 
-Quantum Duel (Tic-Tac-Toe), Football 19, Tape-Tape Arena, Cosmic Arena
-(Ping-Pong), Basketball Stars, Ball Rush 3D, and Mosswing use two-player rooms.
+Quantum Duel (Tic-Tac-Toe), Football 19, Tape-Tape Arena, Ping-Pong,
+Basketball Stars, Ball Rush 3D, Pont de la forêt 3D, Le Labyrinthe des Damnés,
+La Course vers la Princesse, and Mosswing use two-player rooms.
 Football 19 compares five penalty shots per player, and Tape-Tape synchronizes
 the tap race scores and server-side idle decay while each player controls only
 their own lane. Ping-Pong and Basketball run
 on the room host and relay the other player's controls; their snapshots are
 interpolated for the remote player. Ball Rush starts both original runners with
 the same course seed and exchanges interpolated player positions, scores, and
-elimination status. Arcade simulations remain browser-driven rather than fully
-server-authoritative, so their results are not cheat-proof. Running rounds
-pause on disconnect and resume after the player reconnects. Run both commands
-above for online matches; each player can create or join a six-character room
-code.
+elimination status. Some arcade simulations remain browser-driven rather than
+fully server-authoritative, so their results are not cheat-proof. Running
+rounds pause on disconnect and resume after the player reconnects. Run both
+commands above for online matches; each player can create or join a
+six-character room code.
 
 Only games with actual bundled game engines can currently be played online.
 The home-screen demo cards do not yet have game engines and are not online games.
@@ -44,20 +45,79 @@ send validated paddle, shot, and block inputs; neither client can publish a
 score or authoritative game state for these rounds. The server broadcasts
 snapshots to both players for rendering and interpolation.
 
-For phone testing on the same Wi-Fi, open the Vite network URL shown by the dev
-server. The phone must also be able to reach port `3001` on the computer running
-the game server. This local setup does not make the game available between
-countries.
+### Le Labyrinthe des Damnés
+
+The supplied Three.js game and icon are available as
+`public/games/damned-maze.html` and `public/images/damned-maze.jpg`. Solo keeps
+the original scout, demons, procedural shapes, three environments, controls,
+and level progression. Local two-player mode uses ZQSD and arrow keys. Online
+rooms use one server-generated maze configuration for both players; the server
+validates movement and collisions, simulates shared demons and damage, tracks
+each player's lives and portal progress, and broadcasts compact snapshots.
+Maze rooms pause during reconnects, allow 60 seconds to return, and have
+automatic waiting, empty-room, and finished-room expiration.
+Maze-duel stakes are held and settled by the server as demo credits only. The
+finished result plays a vault-and-prize animation using the server's winner,
+player names, and settled pot; it does not represent a real-money payment.
+
+### La Course vers la Princesse
+
+The supplied Three.js castle, knights, dragon, princess, dice, and victory
+cinematic are preserved in `public/games/princess-race.html`. Players can use
+the original solo bot, take turns in local two-player mode, or create/join a
+six-character online room. Online turns and random dice rolls are validated by
+the server; it owns both positions, red-die stocks, turn order, and the winner.
+Online stakes use the existing demo-credit escrow only; the server credits the
+winner with the two-player pot and supports rematches. The room uses the
+existing 10-minute waiting, 5-minute empty-room, 60-second reconnection, and
+2-minute result-retention timers. The supplied castle and forest-bridge images
+are used as their respective game artwork.
+
+### Cartes de paris sportifs (démo)
+
+La page Paris sportifs affiche des cartes de rencontres et un coupon combiné.
+Les cotes et rencontres sont des données de démonstration; le serveur vérifie
+les sélections, fixe les cotes, débite atomiquement le portefeuille de crédits
+démo et protège les validations répétées. Les tickets restent « en attente » :
+aucun fournisseur de matchs/résultats ni règlement n'est configuré. Le solde et
+l'historique de démonstration sont en mémoire et sont réinitialisés au
+redémarrage du serveur. Aucun dépôt, retrait ou paiement en argent réel n'est
+pris en charge.
+
+### PowerShell and phone testing
+
+Run these commands from the project directory in two PowerShell terminals:
+
+```powershell
+npm.cmd install
+npm.cmd run server
+```
+
+In the second terminal:
+
+```powershell
+npm.cmd run dev -- --host 0.0.0.0
+```
+
+On two phones connected to the same Wi-Fi, open the Vite network URL printed by
+the development server. The phones must also be able to reach port `3001` on
+the computer running the server; allow that port through the computer's
+firewall if needed. Create a maze room on one phone and join its six-character
+code on the other. This local setup does not make the game available between
+different networks.
+
+The shared deposit and result animations play automatically in online rooms.
+Mobile browsers may block speech until a tap; use the speaker button to restart
+the full animation with narration enabled.
 
 ## Public internet deployment
 
 `render.yaml` defines a public static frontend and a separate Socket.IO server.
-To create public URLs, push this project to a Git provider, then create a new
-Blueprint on Render and select that repository. Render will build both services,
-configure the frontend to use the server's public hostname over HTTPS/WSS, and
-provide a health endpoint at `/health`. Open the static site's public URL on
-both devices; the players can then join the same six-character room from
-different networks.
+Push this project to a Git provider, then create a new Blueprint on Render and
+select that repository. Render will build both services, configure the frontend
+to use the server's public hostname over HTTPS/WSS, and provide a health
+endpoint at `/health`. Open the static site's public URL on both devices; the
+players can then join the same six-character room from different networks.
 
 The free server plan may sleep when idle, so its first connection can take a
 little time to wake up. Public deployment has not been performed from this local

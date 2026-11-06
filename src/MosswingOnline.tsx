@@ -3,7 +3,9 @@ import { ArrowLeft, Check, Clipboard, Info, LoaderCircle, Search, Settings, User
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './MosswingOnline.css'
+import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
+import { getDemoWalletId } from './demo-wallet'
 
 type View = 'menu' | 'join' | 'waiting' | 'playing' | 'solo' | 'result'
 type Ack = { ok: boolean; error?: string; code?: string; token?: string; queued?: boolean }
@@ -32,6 +34,9 @@ type RoomState = {
   winnerSlot: number | null
   result: string | null
   ping: number | null
+  isPublic: boolean
+  stake: number
+  payout: number
   yourSlot: number
   players: PlayerState[]
   gates: GateState[]
@@ -220,7 +225,15 @@ window.addEventListener('message',function(event){
   return bridged.slice(0, closingIndex) + bridge + bridged.slice(closingIndex)
 }
 
-export default function MosswingOnline({ onClose }: { onClose: () => void }) {
+export default function MosswingOnline({
+  onClose,
+  publicJoin = null,
+  onWalletBalance,
+}: {
+  onClose: () => void
+  publicJoin?: { game: string; code: string; stake: number } | null
+  onWalletBalance?: (balance: number) => void
+}) {
   const [view, setView] = useState<View>('menu')
   const [room, setRoom] = useState<RoomState | null>(null)
   const [codeInput, setCodeInput] = useState('')
@@ -236,11 +249,24 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
   const [copied, setCopied] = useState(false)
   const [clock, setClock] = useState(0)
   const [nickname, setNickname] = useState('')
+  const [stake, setStake] = useState('500')
+  const [joinStake, setJoinStake] = useState('500')
+  const [isPublic, setIsPublic] = useState(true)
   const socketRef = useRef<Socket | null>(null)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const startedRoundRef = useRef('')
   const roomRef = useRef<RoomState | null>(null)
   const pausedRoundRef = useRef(false)
+  const autoJoinRef = useRef(false)
+  const publicJoinRef = useRef(publicJoin)
+  const nicknameRef = useRef(nickname)
+  const walletBalanceCallbackRef = useRef(onWalletBalance)
+
+  useEffect(() => {
+    publicJoinRef.current = publicJoin
+    nicknameRef.current = nickname
+    walletBalanceCallbackRef.current = onWalletBalance
+  }, [nickname, onWalletBalance, publicJoin])
 
   useEffect(() => {
     let active = true
@@ -272,6 +298,19 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
     socket.on('connect', () => {
       setConnected(true)
       setFeedback('')
+      socket.emit('arena:demo-wallet:request', { walletId: getDemoWalletId() })
+      if (publicJoinRef.current?.game === 'mosswing-online' && !autoJoinRef.current) {
+        autoJoinRef.current = true
+        socket.emit('room:join', {
+          code: publicJoinRef.current.code,
+          name: nicknameRef.current,
+          walletId: getDemoWalletId(),
+          stake: publicJoinRef.current.stake,
+        }, (response: Ack) => {
+          if (!response?.ok) setFeedback(response?.error ?? 'Impossible de rejoindre ce salon.')
+        })
+        return
+      }
       const saved = getStoredRoom()
       if (saved) {
         socket.emit('room:reconnect', saved, (response: Ack) => {
@@ -301,6 +340,9 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
     })
     socket.on('room:joined', ({ code, token }: { code: string; token: string }) => {
       window.sessionStorage.setItem('mosswing-online-room', JSON.stringify({ code, token }))
+    })
+    socket.on('arena:demo-wallet', ({ balance }: { balance: number }) => {
+      if (Number.isFinite(balance)) walletBalanceCallbackRef.current?.(balance)
     })
     socket.on('match:found', ({ code, token }: { code: string; token: string }) => {
       window.sessionStorage.setItem('mosswing-online-room', JSON.stringify({ code, token }))
@@ -406,19 +448,29 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
   }, [])
 
   const createRoom = useCallback(async () => {
-    const result = await perform('room:create', { name: nickname })
+    const result = await perform('room:create', {
+      name: nickname,
+      walletId: getDemoWalletId(),
+      stake: Number(stake),
+      isPublic,
+    })
     if (result?.code && result.token) {
       window.sessionStorage.setItem('mosswing-online-room', JSON.stringify({ code: result.code, token: result.token }))
     }
-  }, [nickname, perform])
+  }, [isPublic, nickname, perform, stake])
 
   const joinRoom = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const result = await perform('room:join', { code: codeInput, name: nickname })
+    const result = await perform('room:join', {
+      code: codeInput,
+      name: nickname,
+      walletId: getDemoWalletId(),
+      stake: Number(joinStake),
+    })
     if (result?.code && result.token) {
       window.sessionStorage.setItem('mosswing-online-room', JSON.stringify({ code: result.code, token: result.token }))
     }
-  }, [codeInput, nickname, perform])
+  }, [codeInput, joinStake, nickname, perform])
 
   const leaveRoom = useCallback(async () => {
     const socket = socketRef.current
@@ -507,6 +559,14 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
                 <span>Votre pseudo</span>
                 <input maxLength={18} value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Pilote" />
               </label>
+              <label className="mosswing-name-field">
+                <span>Mise en crédits démo</span>
+                <input type="number" min="1" max="1000000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} />
+              </label>
+              <label className="mosswing-setting">
+                <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} />
+                <span>Afficher mon salon sur l’accueil</span>
+              </label>
               <div className="mosswing-menu-actions">
                 <button type="button" className="mosswing-primary" onClick={() => void createRoom()} disabled={!connected}>
                   <Users size={19} /> Créer une salle
@@ -559,6 +619,18 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
                   onChange={(event) => setCodeInput(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
                   placeholder="ABC123"
                 />
+                <label className="mosswing-name-field">
+                  <span>Mise identique en crédits démo</span>
+                  <input
+                    aria-label="Mise identique en crédits démo"
+                    type="number"
+                    min="0"
+                    max="1000000"
+                    step="1"
+                    value={joinStake}
+                    onChange={(event) => setJoinStake(event.target.value)}
+                  />
+                </label>
                 <button type="submit" className="mosswing-primary" disabled={!connected || codeInput.length !== 6}>Rejoindre</button>
               </form>
             </div>
@@ -572,6 +644,11 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
               <button type="button" className="mosswing-room-code" onClick={() => void copyRoomCode()} aria-label="Copier le code de salle">
                 <span>{room.code}</span>{copied ? <Check size={19} /> : <Clipboard size={19} />}
               </button>
+              <p className="mosswing-status">
+                {room.isPublic ? 'Salon public · visible sur l’accueil' : 'Salon privé'}
+                {' · Mise démo '}{room.stake.toLocaleString('fr-FR')} crédits
+                {' · Pot démo '}{(room.stake * 2).toLocaleString('fr-FR')} crédits
+              </p>
               <div className="mosswing-player-slots">
                 {[0, 1].map((slot) => {
                   const player = players.find((item) => item.slot === slot)
@@ -622,7 +699,7 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
       )}
 
       {view === 'result' && room && (
-        <section className="mosswing-result-shade">
+        <section className={`mosswing-result-shade ${room.winnerSlot === room.yourSlot ? 'is-win' : room.winnerSlot === null ? 'is-draw' : 'is-loss'}`}>
           <div className="mosswing-panel mosswing-result-panel">
             <span className="mosswing-eyebrow">MANCHE TERMINÉE</span>
             <h1>{resultTitle}</h1>
@@ -631,6 +708,13 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
               <div><small>VOTRE SCORE</small><strong>{self?.score ?? 0}</strong></div>
               <div><small>ADVERSAIRE</small><strong>{opponent?.score ?? 0}</strong></div>
             </div>
+            {room.stake > 0 && (
+              <p className={`mosswing-status ${room.winnerSlot === room.yourSlot ? 'is-win' : room.winnerSlot === null ? '' : 'is-loss'}`}>
+                {room.payout && room.winnerSlot === room.yourSlot
+                  ? `🪙 +${room.payout.toLocaleString('fr-FR')} crédits démo`
+                  : room.payout ? 'Gain attribué à l’adversaire' : 'Mise remboursée en crédits démo'}
+              </p>
+            )}
             <button type="button" className="mosswing-primary" onClick={() => void perform('room:rematch')} disabled={!connected || !opponent?.connected || self?.ready}>
               <LoaderCircle size={18} /> {self?.ready ? 'En attente de l’adversaire…' : 'Revanche'}
             </button>
@@ -653,6 +737,12 @@ export default function MosswingOnline({ onClose }: { onClose: () => void }) {
           {opponent?.alive && <span>Vous pouvez regarder {opponent.name} continuer.</span>}
         </div>
       )}
+      <RoomCeremony
+        room={room}
+        title="Mosswing Online"
+        countdown={countdown}
+        winnerSlot={room?.winnerSlot ?? null}
+      />
     </main>
   )
 }

@@ -216,13 +216,15 @@ loop();
       frame.postMessage({ type: 'tape:resume' }, '*')
     }
 
-    const scores = room.gameState.scores
+    const gameState = room.gameState
+    if (!gameState) return
+    const scores = gameState.scores
     if (!scores) return
     const previousScores = previousScoresRef.current
     frame.postMessage({
       type: 'tape:state',
       scores,
-      winner: room.gameState.winner ?? null,
+      winner: gameState.winner ?? null,
     }, '*')
     if (room.phase === 'running' && previousScores) {
       scores.forEach((score, slot) => {

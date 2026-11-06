@@ -50,6 +50,52 @@ function pongServe(state) {
   state.ball = { x: player.x, y: state.server === 0 ? 0.1 : PONG.length - 0.1, z: 0.3, vx: 0, vy: 0, vz: 0 }
 }
 
+function makeForestBridgeState(seed = 1) {
+  let value = seed >>> 0 || 1
+  const next = () => {
+    value ^= value << 13
+    value ^= value >>> 17
+    value ^= value << 5
+    return (value >>> 0) / 0x100000000
+  }
+  const traps = Array.from({ length: 9 }, () => [])
+  for (let row = 1; row <= 8; row += 1) {
+    const first = Math.floor(next() * 5)
+    let second = Math.floor(next() * 4)
+    if (second >= first) second += 1
+    traps[row] = [first, second]
+  }
+  return {
+    game: 'forest-bridge',
+    positions: [0, 0],
+    columns: [0, 4],
+    turn: 0,
+    winner: null,
+    revealed: Array.from({ length: 9 }, () => Array(5).fill(null)),
+    traps,
+    moveSeq: 0,
+    lastMove: null,
+  }
+}
+
+function applyForestBridgeInput(state, slot, input) {
+  const { row, column } = input
+  if (slot !== 0 && slot !== 1 || state.winner !== null || state.turn !== slot
+    || !Number.isInteger(row) || row < 1 || row > 8
+    || !Number.isInteger(column) || column < 0 || column > 4
+    || state.positions[slot] + 1 !== row) return false
+
+  const safe = !state.traps[row].includes(column)
+  state.revealed[row][column] = safe ? slot + 1 : 3
+  state.moveSeq += 1
+  state.lastMove = { id: state.moveSeq, slot, row, column, safe }
+  state.positions[slot] = safe ? row : 0
+  state.columns[slot] = safe ? column : slot === 0 ? 0 : 4
+  if (safe && row === 8) state.winner = slot
+  else state.turn = 1 - slot
+  return true
+}
+
 function pongStartRally(state, slot) {
   state.hitter = slot
   state.serving = true
@@ -93,6 +139,24 @@ function pongStrike(state, slot, speed, targetX, targetY) {
   state.serving = false
   state.rally += 1
   pongEffect(state, 'strike')
+}
+
+function pongPaddleContact(ball, previous, player, dt) {
+  const minY = player.y - 0.32
+  const maxY = player.y + 0.12
+  if (Math.max(previous.y, ball.y) < minY || Math.min(previous.y, ball.y) > maxY) return null
+
+  const travelY = ball.y - previous.y
+  const contactY = clamp(player.y, Math.min(previous.y, ball.y), Math.max(previous.y, ball.y))
+  const contactTime = Math.abs(travelY) > 1e-6
+    ? clamp((contactY - previous.y) / travelY, 0, 1)
+    : 1
+  const x = previous.x + (ball.x - previous.x) * contactTime
+  const z = previous.z + (ball.z - previous.z) * contactTime
+  const playerX = player.x - player.vx * dt * (1 - contactTime)
+  if (Math.abs(x - playerX) >= 0.28 || z <= -0.08 || z >= 0.75) return null
+
+  return { x, y: contactY, z }
 }
 
 function tickPong(state, dt) {
@@ -141,6 +205,7 @@ function tickPong(state, dt) {
   if (state.state !== 'play') return
 
   const previousY = ball.y
+  const previous = { x: ball.x, y: previousY, z: ball.z }
   ball.vz -= PONG.gravity * dt
   ball.x += ball.vx * dt
   ball.y += ball.vy * dt
@@ -148,6 +213,28 @@ function tickPong(state, dt) {
   if (ball.z < -0.8) {
     ball.z = -0.8
     ball.vx = ball.vy = ball.vz = 0
+  }
+  if (!state.netFault && state.receivedBounces >= 1) {
+    if (state.hitter === 1 && ball.vy < 0) {
+      const contact = pongPaddleContact(ball, previous, bottom, dt)
+      if (contact) {
+        Object.assign(ball, contact)
+        const power = clamp(bottom.vy, 0, 4)
+        bottom.sw = 1
+        pongStrike(state, 0, 3.1 + power * 0.35,
+          clamp(ball.x + (ball.x - bottom.x) * 2 + bottom.vx * 0.12, -PONG.width / 2 + 0.1, PONG.width / 2 - 0.1),
+          2 + power * 0.1)
+        return
+      }
+    } else if (state.hitter === 0 && ball.vy > 0) {
+      const contact = pongPaddleContact(ball, previous, top, dt)
+      if (contact) {
+        Object.assign(ball, contact)
+        top.sw = 1
+        pongStrike(state, 1, 3.35, clamp((bottom.targetX - PONG.width / 2) * 1.4, -1.1, 1.1), 0.7)
+        return
+      }
+    }
   }
   if (previousY >= 0 && ball.y < 0) return pongPoint(state, 1)
   if (previousY <= PONG.length && ball.y > PONG.length) return pongPoint(state, 0)
@@ -177,20 +264,6 @@ function tickPong(state, dt) {
   }
   if (ball.z < -0.35) return pongPoint(state, state.netFault || state.receivedBounces === 0 ? 1 - state.hitter : state.hitter)
 
-  if (!state.netFault && state.receivedBounces >= 1) {
-    if (state.hitter === 1 && ball.vy < 0 && ball.y <= bottom.y + 0.12 && ball.y > bottom.y - 0.32
-      && Math.abs(ball.x - bottom.x) < 0.28 && ball.z > -0.08 && ball.z < 0.75) {
-      const power = clamp(bottom.vy, 0, 4)
-      bottom.sw = 1
-      pongStrike(state, 0, 3.1 + power * 0.35,
-        clamp(ball.x + (ball.x - bottom.x) * 2 + bottom.vx * 0.12, -halfWidth + 0.1, halfWidth - 0.1),
-        2 + power * 0.1)
-    } else if (state.hitter === 0 && ball.vy > 0 && ball.y >= top.y - 0.05 && ball.y < top.y + 0.3
-      && Math.abs(ball.x - top.x) < 0.21 && ball.z > -0.05 && ball.z < 0.6) {
-      top.sw = 1
-      pongStrike(state, 1, 3.35, clamp((bottom.targetX - halfWidth) * 1.4, -1.1, 1.1), 0.7)
-    }
-  }
 }
 
 function makeHoopsState() {
@@ -381,6 +454,7 @@ function hoopsTick(state, dt) {
 
 export function createAuthoritativeGame(game, seed) {
   if (game === 'ping-pong') return makePongState()
+  if (game === 'forest-bridge') return makeForestBridgeState(seed)
   if (game === 'basketball-stars') return makeHoopsState()
   if (game === 'cannon-duel') return createCannonDuelState(seed)
   return null
@@ -389,6 +463,7 @@ export function createAuthoritativeGame(game, seed) {
 export function applyAuthoritativeInput(state, slot, input) {
   if (!state || !input || typeof input !== 'object' || Array.isArray(input)) return false
   if (state.game === 'cannon-duel') return applyCannonDuelInput(state, slot, input)
+  if (state.game === 'forest-bridge' && input.type === 'step') return applyForestBridgeInput(state, slot, input)
   if (state.game === 'ping-pong') {
     if (slot !== 0 && slot !== 1) return false
     const player = state.players[slot]

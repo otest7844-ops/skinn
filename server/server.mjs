@@ -8,7 +8,6 @@ import { FlightModel, seededRandom } from './flight-model.mjs'
 import { attachArenaManager } from './arena-manager.mjs'
 
 const PORT = Number(process.env.PORT) || 3001
-const ROOM_GRACE_MS = 25_000
 const ROUND_LIMIT_MS = 120_000
 const COUNTDOWN_MS = 3_000
 const STEP_SECONDS = 1 / 120
@@ -17,10 +16,17 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export function createMosswingServer({
   port = PORT,
-  roomGraceMs = ROOM_GRACE_MS,
   countdownMs = COUNTDOWN_MS,
   roundLimitMs = ROUND_LIMIT_MS,
   tickMs = TICK_MS,
+  forestWaitingMs,
+  forestEmptyMs,
+  forestDisconnectMs,
+  forestFinishedMs,
+  mazeWaitingMs,
+  mazeEmptyMs,
+  mazeDisconnectMs,
+  mazeFinishedMs,
 } = {}) {
   const app = express()
   app.get('/health', (_request, response) => response.json({ status: 'ok', game: 'mosswing-online' }))
@@ -31,7 +37,17 @@ export function createMosswingServer({
     pingInterval: 5000,
     pingTimeout: 10000,
   })
-  attachArenaManager(io, { countdownMs, roomGraceMs })
+  const arenaManager = attachArenaManager(io, {
+    countdownMs,
+    forestWaitingMs,
+    forestEmptyMs,
+    forestDisconnectMs,
+    forestFinishedMs,
+    mazeWaitingMs,
+    mazeEmptyMs,
+    mazeDisconnectMs,
+    mazeFinishedMs,
+  })
 
   const rooms = new Map()
   const matchmaking = []
@@ -66,6 +82,9 @@ export function createMosswingServer({
       deadline: room.deadline,
       winnerSlot: room.winnerSlot,
       result: room.result,
+      isPublic: room.isPublic,
+      stake: room.stake,
+      payout: room.payout,
       ping: room.ping,
       round: room.round,
       players: room.players.map((player, slot) => ({
@@ -94,23 +113,49 @@ export function createMosswingServer({
     }
   }
 
+  function publicRoomList() {
+    return [...rooms.values()]
+      .filter((room) => room.isPublic && room.phase === 'waiting' && room.players.length < 2)
+      .map((room) => ({
+        code: room.code,
+        game: 'mosswing-online',
+        phase: room.phase,
+        host: room.players[0]?.name ?? 'Joueur 1',
+        players: room.players.length,
+        stake: room.stake,
+      }))
+  }
+
+  function broadcastPublicRooms() {
+    io.emit('mosswing:public-rooms', publicRoomList())
+  }
+
   function removeRoom(room) {
     io.to(room.code).emit('room:closed')
     if (room.countdownTimer) clearTimeout(room.countdownTimer)
-    if (room.cleanupTimer) clearTimeout(room.cleanupTimer)
-    for (const player of room.players) {
-      if (player.disconnectTimer) clearTimeout(player.disconnectTimer)
+    for (const [slot, player] of room.players.entries()) {
+      const refund = room.escrowed[slot] ?? 0
+      if (refund > 0) {
+        arenaManager.addDemoCredits(player.walletId, refund)
+        arenaManager.sendDemoBalance(player)
+        room.escrowed[slot] = 0
+      }
       if (player.socketId) playerRooms.delete(player.socketId)
     }
     rooms.delete(room.code)
   }
 
-  function createRoom(players) {
+  function createRoom(players, { isPublic = false, stake = 0 } = {}) {
     const code = makeCode()
     const room = {
       code,
       phase: 'waiting',
       players,
+      isPublic,
+      stake,
+      escrowed: players.map(() => stake),
+      settled: false,
+      payout: 0,
       seed: null,
       countdownEndsAt: null,
       startedAt: null,
@@ -145,9 +190,12 @@ export function createMosswingServer({
     return name || `Joueur ${slot + 1}`
   }
 
-  function createPlayer(socket, slot, name) {
+  function createPlayer(socket, slot, name, walletValue) {
     return {
       token: randomUUID(),
+      walletId: typeof walletValue === 'string' && /^[a-z0-9-]{8,64}$/i.test(walletValue)
+        ? walletValue
+        : randomUUID(),
       socketId: socket.id,
       name: playerName(name, slot),
       eliminatedAt: null,
@@ -156,7 +204,6 @@ export function createMosswingServer({
       ready: false,
       model: null,
       lastFlapAt: 0,
-      disconnectTimer: null,
       slot,
     }
   }
@@ -174,11 +221,23 @@ export function createMosswingServer({
     room.phase = 'finished'
     room.winnerSlot = winnerSlot
     room.result = result
+    room.settled = true
+    room.payout = winnerSlot === null ? 0 : room.stake * 2
+    if (room.stake > 0) {
+      if (winnerSlot === null) {
+        room.players.forEach((player, slot) => {
+          if (room.escrowed[slot] > 0) arenaManager.addDemoCredits(player.walletId, room.escrowed[slot])
+        })
+      } else {
+        const winner = room.players[winnerSlot]
+        if (winner) arenaManager.addDemoCredits(winner.walletId, room.payout)
+      }
+      room.escrowed = [0, 0]
+      room.players.forEach(arenaManager.sendDemoBalance)
+    }
     room.players.forEach((player) => { player.ready = false })
     broadcastRoom(room)
-    if (room.cleanupTimer) clearTimeout(room.cleanupTimer)
-    room.cleanupTimer = setTimeout(() => removeRoom(room), 120_000)
-    room.cleanupTimer.unref?.()
+    broadcastPublicRooms()
   }
 
   function beginRound(room) {
@@ -274,9 +333,21 @@ export function createMosswingServer({
     socket.on('room:create', (payload, callback) => {
       if (findPlayer(socket)) return sendAck(callback, { ok: false, error: 'Vous êtes déjà dans une salle.' })
       if (rooms.size >= 300) return sendAck(callback, { ok: false, error: 'Les salles sont temporairement complètes.' })
-      const player = createPlayer(socket, 0, payload?.name)
-      const room = createRoom([player])
+      const stake = payload?.stake ?? 0
+      if (!Number.isSafeInteger(stake) || stake < 0 || stake > 1_000_000) {
+        return sendAck(callback, { ok: false, error: 'La mise de démonstration est invalide.' })
+      }
+      if (payload?.isPublic === true && stake < 1) {
+        return sendAck(callback, { ok: false, error: 'Un salon public doit avoir une mise de démonstration positive.' })
+      }
+      const player = createPlayer(socket, 0, payload?.name, payload?.walletId)
+      if (!arenaManager.reserveDemoStake(player, stake)) {
+        return sendAck(callback, { ok: false, error: 'Solde de démonstration insuffisant pour cette mise.' })
+      }
+      const room = createRoom([player], { isPublic: payload?.isPublic === true, stake })
       acknowledgeRoom(socket, room, player, callback)
+      arenaManager.sendDemoBalance(player)
+      broadcastPublicRooms()
     })
 
     socket.on('room:join', (payload, callback) => {
@@ -286,12 +357,25 @@ export function createMosswingServer({
       if (!room || room.phase === 'finished') return sendAck(callback, { ok: false, error: 'Salle introuvable ou déjà terminée.' })
       if (room.players.length >= 2) return sendAck(callback, { ok: false, error: 'Cette salle est déjà complète.' })
       if (findPlayer(socket)) return sendAck(callback, { ok: false, error: 'Vous êtes déjà dans une salle.' })
-      const player = createPlayer(socket, 1, payload?.name)
+      if ((payload?.stake ?? 0) !== room.stake) {
+        return sendAck(callback, { ok: false, error: 'La mise doit être identique à celle affichée dans le salon.' })
+      }
+      const player = createPlayer(socket, 1, payload?.name, payload?.walletId)
+      if (!arenaManager.reserveDemoStake(player, room.stake)) {
+        return sendAck(callback, { ok: false, error: 'Solde de démonstration insuffisant pour cette mise.' })
+      }
       room.players.push(player)
+      room.escrowed[player.slot] = room.stake
       player.roomCode = room.code
       playerRooms.set(socket.id, { code: room.code, token: player.token })
       socket.join(room.code)
       acknowledgeRoom(socket, room, player, callback)
+      arenaManager.sendDemoBalance(player)
+      broadcastPublicRooms()
+    })
+
+    socket.on('mosswing:public-rooms:request', () => {
+      socket.emit('mosswing:public-rooms', publicRoomList())
     })
 
     socket.on('room:reconnect', (payload, callback) => {
@@ -299,11 +383,9 @@ export function createMosswingServer({
       const token = typeof payload?.token === 'string' ? payload.token : ''
       const room = rooms.get(code)
       const player = room?.players.find((item) => item.token === token)
-      if (!room || !player || player.connected || room.phase === 'finished') {
-        return sendAck(callback, { ok: false, error: 'La reconnexion à cette salle a expiré.' })
+      if (!room || !player || player.connected) {
+        return sendAck(callback, { ok: false, error: 'Cette salle ou ce joueur est introuvable.' })
       }
-      if (player.disconnectTimer) clearTimeout(player.disconnectTimer)
-      player.disconnectTimer = null
       player.connected = true
       player.socketId = socket.id
       socket.join(code)
@@ -325,6 +407,7 @@ export function createMosswingServer({
       }
       sendAck(callback, { ok: true, code, token, slot: room.players.indexOf(player) })
       broadcastRoom(room)
+      broadcastPublicRooms()
     })
 
     socket.on('room:ready', (payload, callback) => {
@@ -350,6 +433,25 @@ export function createMosswingServer({
       }
       entry.player.ready = true
       if (entry.room.players.every((player) => player.ready)) {
+        const reserved = []
+        if (entry.room.stake > 0) {
+          for (const player of entry.room.players) {
+            if (!arenaManager.reserveDemoStake(player, entry.room.stake)) {
+              reserved.forEach((reservedPlayer) => {
+                arenaManager.addDemoCredits(reservedPlayer.walletId, entry.room.stake)
+                arenaManager.sendDemoBalance(reservedPlayer)
+              })
+              entry.room.players.forEach((player) => { player.ready = false })
+              broadcastRoom(entry.room)
+              return sendAck(callback, { ok: false, error: 'Solde de démonstration insuffisant pour la revanche.' })
+            }
+            reserved.push(player)
+            arenaManager.sendDemoBalance(player)
+          }
+          entry.room.escrowed = [entry.room.stake, entry.room.stake]
+        }
+        entry.room.settled = false
+        entry.room.payout = 0
         entry.room.phase = 'waiting'
         entry.room.winnerSlot = null
         entry.room.result = null
@@ -386,13 +488,14 @@ export function createMosswingServer({
       } else {
         removeRoom(entry.room)
       }
+      broadcastPublicRooms()
       sendAck(callback, { ok: true })
     })
 
     socket.on('disconnect', () => {
       removeFromMatchmaking(socket)
       const entry = findPlayer(socket)
-      if (!entry || entry.room.phase === 'finished') return
+      if (!entry) return
       const { room, player } = entry
       player.connected = false
       player.socketId = null
@@ -405,16 +508,7 @@ export function createMosswingServer({
         room.countdownTimer = null
       }
       broadcastRoom(room)
-      player.disconnectTimer = setTimeout(() => {
-        if (player.connected) return
-        if (room.phase === 'running' || room.phase === 'paused') {
-          const winner = room.players.indexOf(player) === 0 ? 1 : 0
-          finishRoom(room, winner, 'deconnexion')
-        } else {
-          removeRoom(room)
-        }
-      }, roomGraceMs)
-      player.disconnectTimer.unref?.()
+      broadcastPublicRooms()
     })
   })
 
@@ -485,7 +579,7 @@ export function createMosswingServer({
     })
   }
 
-  return { app, httpServer, io, rooms, start, stop }
+  return { app, httpServer, io, rooms, arenaRooms: arenaManager.rooms, start, stop }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

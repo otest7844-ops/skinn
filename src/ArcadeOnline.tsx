@@ -3,9 +3,11 @@ import { ArrowLeft, Check, Clipboard, LoaderCircle, Users, Wifi, WifiOff } from 
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './ArcadeOnline.css'
+import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
+import { getDemoWalletId } from './demo-wallet'
 
-export type ArcadeGameId = 'ping-pong' | 'basketball-stars' | 'ball-rush' | 'cannon-duel'
+export type ArcadeGameId = 'ping-pong' | 'basketball-stars' | 'ball-rush' | 'cannon-duel' | 'forest-bridge' | 'damned-maze' | 'princess-race' | 'grotte-aux-couteaux' | 'colonnes-du-canyon'
 
 type Player = { slot: number; you: boolean; name: string; connected: boolean; ready: boolean }
 type Room = {
@@ -19,6 +21,10 @@ type Room = {
   players: Player[]
   gameState: unknown
   yourSlot: number
+  isPublic?: boolean
+  stake?: number
+  payout?: number
+  winnerSlot?: number | null
 }
 type Ack = { ok: boolean; error?: string; code?: string; token?: string }
 type View = 'home' | 'join' | 'lobby' | 'game' | 'solo' | 'local'
@@ -26,10 +32,15 @@ type ScoreState = { score?: unknown; players?: unknown }
 
 const socketUrl = getMultiplayerUrl()
 const gameDetails: Record<ArcadeGameId, { title: string; label: string }> = {
-  'ping-pong': { title: 'Cosmic Arena', label: 'PING-PONG' },
+  'ping-pong': { title: 'Ping Pong', label: 'PING-PONG' },
   'basketball-stars': { title: 'Basketball Stars', label: 'BASKETBALL' },
   'ball-rush': { title: 'Ball Rush 3D', label: 'BALL RUSH 3D' },
   'cannon-duel': { title: 'Canon Duel', label: 'CANON DUEL' },
+  'forest-bridge': { title: 'Pont de la forêt 3D', label: 'PONT DE LA FORÊT 3D' },
+  'damned-maze': { title: 'Le Labyrinthe des Damnés', label: 'LE LABYRINTHE DES DAMNÉS' },
+  'princess-race': { title: 'La Course vers la Princesse', label: 'COURSE VERS LA PRINCESSE' },
+  'grotte-aux-couteaux': { title: 'Grotte aux Couteaux', label: 'GROTTE AUX COUTEAUX' },
+  'colonnes-du-canyon': { title: 'Colonnes du Canyon', label: 'COLONNES DU CANYON' },
 }
 
 function getBridgeName(game: ArcadeGameId) {
@@ -69,11 +80,24 @@ function getScores(state: unknown, game: ArcadeGameId): [number, number] | null 
   return null
 }
 
-export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; onClose: () => void }) {
+export default function ArcadeOnline({
+  game,
+  onClose,
+  publicJoin = null,
+  onWalletBalance,
+}: {
+  game: ArcadeGameId
+  onClose: () => void
+  publicJoin?: { game: string; code: string; stake: number } | null
+  onWalletBalance?: (balance: number) => void
+}) {
   const [view, setView] = useState<View>('home')
   const [room, setRoom] = useState<Room | null>(null)
   const [nickname, setNickname] = useState('')
   const [codeInput, setCodeInput] = useState('')
+  const [joinStake, setJoinStake] = useState('500')
+  const [stake, setStake] = useState('500')
+  const [publicRoom, setPublicRoom] = useState(true)
   const [feedback, setFeedback] = useState('')
   const [connected, setConnected] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -83,6 +107,12 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
   const roomRef = useRef<Room | null>(null)
   const enabledRoundRef = useRef('')
   const finishRequestedRef = useRef(false)
+  const attemptedPublicJoinRef = useRef('')
+  const cannonFireAtRef = useRef(0)
+  const nicknameRef = useRef(nickname)
+  const walletBalanceCallbackRef = useRef(onWalletBalance)
+  nicknameRef.current = nickname
+  walletBalanceCallbackRef.current = onWalletBalance
 
   useEffect(() => {
     const socket = io(socketUrl, { reconnection: true, reconnectionAttempts: 8, timeout: 8000 })
@@ -90,6 +120,23 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
     socket.on('connect', () => {
       setConnected(true)
       setFeedback('')
+      const publicJoinKey = publicJoin?.game === game
+        ? `${game}:${publicJoin.code}:${publicJoin.stake}`
+        : ''
+      if (publicJoin && publicJoin.game === game
+        && publicJoinKey && attemptedPublicJoinRef.current !== publicJoinKey) {
+        attemptedPublicJoinRef.current = publicJoinKey
+        socket.emit('arena:room:join', {
+          game,
+          code: publicJoin.code,
+          stake: publicJoin.stake,
+          name: nicknameRef.current,
+          walletId: getDemoWalletId(),
+        }, (result: Ack) => {
+          if (!result?.ok) setFeedback(result.error ?? 'Impossible de rejoindre ce salon.')
+        })
+        return
+      }
       const saved = window.sessionStorage.getItem(`arcade-online-${game}`)
       if (!saved) {
         if (roomRef.current) {
@@ -130,7 +177,9 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
       setRoom(localRoom)
       if (localRoom.phase === 'countdown') setClock(Date.now())
       if (next.phase !== 'running') finishRequestedRef.current = false
-      setView(next.phase === 'running' || next.phase === 'paused' ? 'game' : 'lobby')
+      setView(next.phase === 'running' || next.phase === 'paused'
+        || next.phase === 'finished' && (game === 'princess-race' || game === 'damned-maze'
+          || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon') ? 'game' : 'lobby')
       if (next.phase === 'running' || next.phase === 'paused') {
         frameRef.current?.contentWindow?.postMessage({
           type: `${getBridgeName(game)}:${next.phase === 'paused' ? 'pause' : 'resume'}`,
@@ -140,16 +189,26 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
     socket.on('arena:room:joined', ({ code, token }: { code: string; token: string }) => {
       window.sessionStorage.setItem(`arcade-online-${game}`, JSON.stringify({ code, token }))
     })
+    socket.on('arena:demo-wallet', ({ balance }: { balance: number }) => {
+      if (Number.isFinite(balance)) walletBalanceCallbackRef.current?.(balance)
+    })
     socket.on('arena:remote-input', ({ slot, input }: { slot: number; input: unknown }) => {
       if (slot !== 1 || roomRef.current?.game !== game) return
       frameRef.current?.contentWindow?.postMessage({ type: `${getBridgeName(game)}:remote-input`, input }, window.location.origin)
     })
-    socket.on('arena:closed', () => {
+    socket.on('arena:expired', ({ message }: { message?: string }) => {
       window.sessionStorage.removeItem(`arcade-online-${game}`)
       roomRef.current = null
       setRoom(null)
       setView('home')
-      setFeedback('La salle a été fermée.')
+      setFeedback(message ?? 'Le salon a expiré.')
+    })
+    socket.on('arena:closed', ({ reason }: { reason?: string } = {}) => {
+      window.sessionStorage.removeItem(`arcade-online-${game}`)
+      roomRef.current = null
+      setRoom(null)
+      setView('home')
+      setFeedback(reason ?? 'La salle a été fermée.')
     })
     return () => {
       socket.removeAllListeners()
@@ -157,7 +216,7 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
       socketRef.current = null
       roomRef.current = null
     }
-  }, [game])
+  }, [game, publicJoin, publicJoin?.code, publicJoin?.game, publicJoin?.stake])
 
   useEffect(() => {
     if (room?.phase !== 'countdown') return
@@ -167,9 +226,9 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
 
   useEffect(() => {
     const current = room
-    if (!current || current.phase !== 'running' || !frameRef.current?.contentWindow) return
+    if (!current || !['running', 'finished'].includes(current.phase) || !frameRef.current?.contentWindow) return
     const roundKey = `${current.code}-${current.round}`
-    if (enabledRoundRef.current !== roundKey) {
+    if (current.phase === 'running' && enabledRoundRef.current !== roundKey) {
       enabledRoundRef.current = roundKey
       frameRef.current.contentWindow.postMessage({
         type: `${getBridgeName(game)}:enable`,
@@ -185,6 +244,15 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
         state: current.gameState,
         slot: current.yourSlot,
         phase: current.phase,
+        result: {
+          code: current.code,
+          round: current.round,
+          yourSlot: current.yourSlot,
+          winnerSlot: current.winnerSlot,
+          stake: current.stake,
+          payout: current.payout,
+          players: current.players,
+        },
       }, window.location.origin)
     }
   }, [game, room])
@@ -196,9 +264,44 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
       if (!message || typeof message.type !== 'string') return
       const current = roomRef.current
       const socket = socketRef.current
-      if (!current || !socket?.connected || current.phase !== 'running') return
+      if (!current || !socket) return
+      if (game === 'damned-maze' && current.phase === 'finished' && message.type === 'damned-maze:lobby') {
+        setView('lobby')
+        return
+      }
+      if (game === 'damned-maze' && current.phase === 'finished' && message.type === 'damned-maze:rematch') {
+        socket.emit('arena:room:rematch', {}, (result: Ack) => {
+          if (!result?.ok) setFeedback(result?.error ?? 'Impossible de relancer la partie.')
+        })
+        return
+      }
+      if ((game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon')
+        && current.phase === 'finished' && message.type === `${getBridgeName(game)}:rematch`) {
+        socket.emit('arena:room:rematch', {}, (result: Ack) => {
+          if (!result?.ok) setFeedback(result?.error ?? 'Impossible de relancer la partie.')
+        })
+        return
+      }
+      if (!socket.connected || current.phase !== 'running'
+        && !(game === 'princess-race' && current.phase === 'finished')
+        && !((game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon') && current.phase === 'finished')) return
       if (message.type === `${getBridgeName(game)}:input`) {
-        socket.emit('arena:input', { input: message.input })
+        socket.emit('arena:input', { input: message.input }, (result: Ack) => {
+          if (!result?.ok) {
+            if (game === 'princess-race') {
+              frameRef.current?.contentWindow?.postMessage({
+                type: 'princess-race:rejected',
+                error: result?.error ?? 'Action refusée par le serveur.',
+              }, window.location.origin)
+            } else if (game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon') {
+              setFeedback(result?.error ?? 'Le serveur a refusé cette commande.')
+            }
+          }
+        })
+      } else if (game === 'princess-race' && message.type === 'princess-race:rematch') {
+        socket.emit('arena:room:rematch', {}, (result: Ack) => {
+          if (!result?.ok) setFeedback(result.error ?? 'Impossible de relancer la partie.')
+        })
       } else if (message.type === `${getBridgeName(game)}:state`) {
         socket.emit('arena:state', { state: message.state })
         const state = message.state as { status?: unknown; state?: unknown } | null
@@ -230,14 +333,33 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
     }
   }
 
+  async function fireCannon() {
+    const now = performance.now()
+    if (now - cannonFireAtRef.current < 1200) return
+    cannonFireAtRef.current = now
+    await perform('arena:input', { input: { type: 'fire' } })
+  }
+
   async function createRoom() {
-    const result = await perform('arena:room:create', { game, name: nickname })
+    const result = await perform('arena:room:create', {
+      game,
+      name: nickname,
+      walletId: getDemoWalletId(),
+      isPublic: publicRoom,
+      stake: Number(stake),
+    })
     if (result) setView('lobby')
   }
 
   async function joinRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const result = await perform('arena:room:join', { game, code: codeInput, name: nickname })
+    const result = await perform('arena:room:join', {
+      game,
+      code: codeInput,
+      name: nickname,
+      walletId: getDemoWalletId(),
+      stake: Number(joinStake),
+    })
     if (result) setView('lobby')
   }
 
@@ -276,32 +398,78 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
   const ownPlayer = room?.players.find((player) => player.you)
   const finishedRoom = room?.phase === 'finished' ? room : null
   const finalScores = finishedRoom ? getScores(finishedRoom.gameState, game) : null
-  const resultTitle = finalScores && finishedRoom
-    ? finalScores[finishedRoom.yourSlot] === finalScores[1 - finishedRoom.yourSlot]
-      ? 'Égalité'
-      : finalScores[finishedRoom.yourSlot] > finalScores[1 - finishedRoom.yourSlot] ? 'Victoire' : 'Défaite'
+  const mazeState = finishedRoom && game === 'damned-maze'
+    ? finishedRoom.gameState as { winner?: number | null; level?: number; result?: string }
     : null
+  const mazeOutcome = mazeState
+    ? mazeState.winner === null || mazeState.winner === undefined
+      ? 'Égalité'
+      : mazeState.winner === finishedRoom?.yourSlot ? 'Victoire' : 'Défaite'
+    : null
+  const resultTitle = finalScores && finishedRoom
+    ? game === 'ball-rush' && (finishedRoom.winnerSlot === 0 || finishedRoom.winnerSlot === 1)
+      ? finishedRoom.winnerSlot === finishedRoom.yourSlot ? 'Victoire' : 'Défaite'
+      : finalScores[finishedRoom.yourSlot] === finalScores[1 - finishedRoom.yourSlot]
+        ? 'Égalité'
+        : finalScores[finishedRoom.yourSlot] > finalScores[1 - finishedRoom.yourSlot] ? 'Victoire' : 'Défaite'
+    : null
+  const gameStateWinner = finishedRoom?.gameState && typeof finishedRoom.gameState === 'object'
+    ? (finishedRoom.gameState as { winner?: unknown }).winner
+    : null
+  const resolvedWinnerSlot = finishedRoom?.winnerSlot === 0 || finishedRoom?.winnerSlot === 1
+    ? finishedRoom.winnerSlot
+    : gameStateWinner === 0 || gameStateWinner === 1
+      ? gameStateWinner
+      : resultTitle === 'Victoire' || resultTitle === 'Défaite'
+        ? resultTitle === 'Victoire' ? finishedRoom?.yourSlot ?? null : finishedRoom?.yourSlot === 0 ? 1 : 0
+        : null
   const seconds = room?.countdownEndsAt
     ? clock ? Math.max(1, Math.ceil((room.countdownEndsAt - clock) / 1000)) : 3
     : null
   const details = gameDetails[game]
 
   return (
-    <section className="arcade-online-screen" aria-label={`Salon ${details.title}`}>
-      {view === 'solo' || view === 'local' || view === 'game' && (room?.phase === 'running' || room?.phase === 'paused') ? (
+    <section className={`arcade-online-screen${game === 'princess-race' ? ' arcade-online-screen--princess' : ''}`} aria-label={`Salon ${details.title}`}>
+      {view === 'solo' || view === 'local' || view === 'game' && (room?.phase === 'running' || room?.phase === 'paused' || room?.phase === 'finished' && (game === 'princess-race' || game === 'damned-maze' || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon')) ? (
         <>
           <iframe
             ref={frameRef}
             className="arcade-game-frame"
-            src={`/games/${game}.html`}
+            src={game === 'ping-pong' && view !== 'game'
+              ? '/games/ping-pong.html'
+              : `/games/${game === 'ping-pong' ? 'ping-pong-online' : game}.html`}
             title={details.title}
             onLoad={() => {
               if (view === 'local' && game === 'cannon-duel') {
                 frameRef.current?.contentWindow?.postMessage({ type: 'cannon-duel:local' }, window.location.origin)
                 return
               }
+              if (view === 'local' && game === 'damned-maze') {
+                frameRef.current?.contentWindow?.postMessage({ type: 'damned-maze:local' }, window.location.origin)
+                return
+              }
+              if (game === 'princess-race' && view === 'local') {
+                frameRef.current?.contentWindow?.postMessage({ type: 'princess-race:local' }, window.location.origin)
+                return
+              }
+              if (view === 'local' && (game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon')) {
+                frameRef.current?.contentWindow?.postMessage({ type: `${getBridgeName(game)}:local` }, window.location.origin)
+                return
+              }
               const current = roomRef.current
-              if (!current || !['running', 'paused'].includes(current.phase)) return
+              if (game === 'grotte-aux-couteaux' && view === 'solo') {
+                frameRef.current?.contentWindow?.postMessage({ type: 'grotte-aux-couteaux:solo' }, window.location.origin)
+                return
+              }
+              if (game === 'colonnes-du-canyon' && view === 'solo') {
+                frameRef.current?.contentWindow?.postMessage({ type: 'colonnes-du-canyon:solo' }, window.location.origin)
+                return
+              }
+              if (game === 'princess-race' && view === 'solo') {
+                frameRef.current?.contentWindow?.postMessage({ type: 'princess-race:solo' }, window.location.origin)
+                return
+              }
+              if (!current || !['running', 'paused', 'finished'].includes(current.phase)) return
               enabledRoundRef.current = ''
               frameRef.current?.contentWindow?.postMessage({
                 type: `${getBridgeName(game)}:enable`,
@@ -311,6 +479,24 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
                 names: current.players.map((player) => player.name),
               }, window.location.origin)
               enabledRoundRef.current = `${current.code}-${current.round}`
+              if (current.gameState) {
+                frameRef.current?.contentWindow?.postMessage({
+                  type: `${getBridgeName(game)}:state`,
+                  state: current.gameState,
+                  slot: current.yourSlot,
+                  phase: current.phase,
+                  names: current.players.map((player) => player.name),
+                  result: {
+                    code: current.code,
+                    round: current.round,
+                    yourSlot: current.yourSlot,
+                    winnerSlot: current.winnerSlot,
+                    stake: current.stake,
+                    payout: current.payout,
+                    players: current.players,
+                  },
+                }, window.location.origin)
+              }
               if (current.phase === 'paused') {
                 frameRef.current?.contentWindow?.postMessage({ type: `${getBridgeName(game)}:pause` }, window.location.origin)
               }
@@ -330,6 +516,26 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
               </span>
             ))}
           </div>}
+          {game === 'cannon-duel' && room?.phase === 'running' && (
+            <button type="button" className="arcade-cannon-fire" onClick={() => void fireCannon()}>
+              Tirer avec votre canon
+            </button>
+          )}
+              {(game === 'princess-race' || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon')
+                && room?.phase === 'finished' && (
+                <div className="arcade-princess-result" role="status">
+                  <strong>{game === 'princess-race'
+                    ? room.winnerSlot === room.yourSlot ? 'Victoire — la princesse est sauvée !' : 'Défaite — votre adversaire a gagné.'
+                    : game === 'colonnes-du-canyon'
+                      ? room.winnerSlot === room.yourSlot ? 'Victoire — vous avez atteint le gâteau en premier !' : 'Défaite — votre adversaire a atteint le gâteau.'
+                      : room.winnerSlot === room.yourSlot ? 'Victoire — vous avez survécu à la grotte !' : 'Défaite — votre adversaire a survécu.'}</strong>
+                  <span>{room.stake ? `Pot de ${room.payout?.toLocaleString('fr-FR') ?? 0} crédits démo` : 'Partie terminée'}</span>
+                  {room.payout && room.winnerSlot === room.yourSlot && <b>+{room.payout.toLocaleString('fr-FR')} crédits démo versés</b>}
+                  <button type="button" className="arcade-primary-button" disabled={!connected || ownPlayer?.ready} onClick={requestRematch}>
+                    {ownPlayer?.ready ? 'Revanche demandée' : 'Rejouer'}
+                  </button>
+                </div>
+              )}
           {room?.phase === 'paused' && (
             <div className="arcade-disconnect-notice" role="status">
               <WifiOff size={17} /> Connexion interrompue — la manche reprendra après reconnexion.
@@ -356,12 +562,23 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
                 </label>
                 <button type="button" className="arcade-secondary-button" onClick={() => setView('solo')}>Jouer en solo</button>
                 {game === 'cannon-duel' && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>2 joueurs sur cet appareil</button>}
+                {['damned-maze', 'princess-race', 'grotte-aux-couteaux'].includes(game) && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>Jouer en local à deux</button>}
+                <label className="arcade-field">Mise en crédits démo
+                  <input type="number" min="1" max="1000000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} />
+                </label>
+                <label className="arcade-public-toggle">
+                  <input type="checkbox" checked={publicRoom} onChange={(event) => setPublicRoom(event.target.checked)} />
+                  Afficher mon salon sur l’accueil
+                </label>
                 <button type="button" className="arcade-primary-button" disabled={!connected} onClick={createRoom}>Créer une salle</button>
                 <button type="button" className="arcade-secondary-button" disabled={!connected} onClick={() => { setView('join'); setFeedback('') }}>Rejoindre une salle</button>
                 {view === 'join' && (
                   <form className="arcade-join-form" onSubmit={joinRoom}>
                     <label className="arcade-field">Code de la salle
                       <input value={codeInput} maxLength={6} onChange={(event) => setCodeInput(event.target.value.toUpperCase())} placeholder="ABC123" />
+                    </label>
+                    <label className="arcade-field">Mise identique en crédits démo
+                      <input type="number" min="0" max="1000000" step="1" value={joinStake} onChange={(event) => setJoinStake(event.target.value)} />
                     </label>
                     <button type="submit" className="arcade-primary-button" disabled={!connected || codeInput.length !== 6}>Rejoindre</button>
                   </form>
@@ -370,10 +587,25 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
             ) : (
               <>
                 <div className="arcade-room-code"><strong>{room.code}</strong><button type="button" onClick={copyCode}>{copied ? <Check size={17} /> : <Clipboard size={17} />}{copied ? 'Copié' : 'Copier'}</button></div>
+                <p className="arcade-lobby-hint">
+                  {room.isPublic ? 'Salon public · visible sur l’accueil' : 'Salon privé'}
+                  {' · Mise démo '}{(room.stake ?? 0).toLocaleString('fr-FR')} crédits
+                  {' · Pot démo '}{((room.stake ?? 0) * 2).toLocaleString('fr-FR')} crédits
+                </p>
                 {room.phase === 'finished' && finalScores && resultTitle && (
-                  <div className="arcade-result-score">
+                  <div className={`arcade-result-score ${resultTitle === 'Victoire' ? 'is-win' : resultTitle === 'Défaite' ? 'is-loss' : 'is-draw'}`}>
                     <strong>{resultTitle}</strong>
                     <span>{finalScores[room.yourSlot]} <i>:</i> {finalScores[1 - room.yourSlot]}</span>
+                    {room.payout && room.winnerSlot === room.yourSlot
+                      ? <b>🪙 +{room.payout.toLocaleString('fr-FR')} crédits démo</b>
+                      : room.stake ? <b>{room.payout ? 'Gain attribué à l’adversaire' : 'Mise remboursée en crédits démo'}</b> : null}
+                  </div>
+                )}
+                {room.phase === 'finished' && mazeOutcome && (
+                  <div className={`arcade-result-score ${mazeOutcome === 'Victoire' ? 'is-win' : mazeOutcome === 'Défaite' ? 'is-loss' : 'is-draw'}`}>
+                    <strong>{mazeOutcome}</strong>
+                    <span>Niveau atteint : {mazeState?.level ?? 1}</span>
+                    <b>{mazeState?.result === 'opponent-disconnected' ? 'Le joueur adverse ne s’est pas reconnecté à temps.' : 'La partie est terminée.'}</b>
                   </div>
                 )}
                 <div className="arcade-player-list">
@@ -399,6 +631,12 @@ export default function ArcadeOnline({ game, onClose }: { game: ArcadeGameId; on
           </main>
         </div>
       )}
+      <RoomCeremony
+        room={room}
+        title={details.title}
+        countdown={seconds}
+        winnerSlot={resolvedWinnerSlot}
+      />
     </section>
   )
 }

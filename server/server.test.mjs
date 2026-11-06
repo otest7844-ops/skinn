@@ -97,6 +97,60 @@ test('creates two-player rooms, rejects a third player, and starts a shared roun
   assert.equal(nextRound[0].seed, nextRound[1].seed)
 })
 
+test('lists public Mosswing rooms and requires matching demo stakes', async (context) => {
+  const gameServer = createMosswingServer({ port: 0 })
+  const address = await gameServer.start()
+  const url = `http://127.0.0.1:${address.port}`
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await gameServer.stop()
+  })
+
+  async function connect() {
+    const socket = createSocket(url, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  const host = await connect()
+  const guest = await connect()
+  const hostWallet = 'mosswing-host-wallet'
+  const guestWallet = 'mosswing-guest-wallet'
+  const listed = waitFor(host, 'mosswing:public-rooms', (rooms) => rooms.some((room) => room.stake === 100))
+  const hostBalance = waitFor(host, 'arena:demo-wallet', (wallet) => wallet.balance === 9_900)
+  const created = await emitAck(host, 'room:create', {
+    name: 'Pilote A',
+    walletId: hostWallet,
+    isPublic: true,
+    stake: 100,
+  })
+  assert.equal(created.ok, true)
+  assert.equal((await hostBalance).balance, 9_900)
+  assert.equal((await listed)[0].game, 'mosswing-online')
+
+  assert.equal((await emitAck(guest, 'room:join', {
+    code: created.code,
+    walletId: guestWallet,
+    stake: 50,
+  })).ok, false)
+  const guestBalance = waitFor(guest, 'arena:demo-wallet', (wallet) => wallet.balance === 9_900)
+  assert.equal((await emitAck(guest, 'room:join', {
+    code: created.code,
+    name: 'Pilote B',
+    walletId: guestWallet,
+    stake: 100,
+  })).ok, true)
+  assert.equal((await guestBalance).balance, 9_900)
+
+  const returnedHostBalance = waitFor(host, 'arena:demo-wallet', (wallet) => wallet.balance === 10_000)
+  const closed = waitFor(guest, 'room:closed')
+  assert.equal((await emitAck(host, 'room:leave')).ok, true)
+  await closed
+  assert.equal((await returnedHostBalance).balance, 10_000)
+})
+
 test('keeps the round active after one player is eliminated and broadcasts both creatures', async (context) => {
   const gameServer = createMosswingServer({ port: 0, countdownMs: 40, roundLimitMs: 5000 })
   const address = await gameServer.start()
@@ -157,8 +211,8 @@ test('keeps the round active after one player is eliminated and broadcasts both 
   assert.equal(result.winnerSlot, survivingSlot)
 })
 
-test('restores a disconnected player with the room token', async (context) => {
-  const gameServer = createMosswingServer({ port: 0, roomGraceMs: 300 })
+test('restores a disconnected player with the room token after the former grace period', async (context) => {
+  const gameServer = createMosswingServer({ port: 0, roomGraceMs: 30 })
   const address = await gameServer.start()
   const url = `http://127.0.0.1:${address.port}`
   const sockets = []
@@ -180,6 +234,8 @@ test('restores a disconnected player with the room token', async (context) => {
   const created = await emitAck(host, 'room:create')
   const joined = await emitAck(guest, 'room:join', { code: created.code })
   guest.disconnect()
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  assert.equal(gameServer.rooms.has(created.code), true)
 
   const replacement = await connect()
   const restored = await emitAck(replacement, 'room:reconnect', { code: joined.code, token: joined.token })

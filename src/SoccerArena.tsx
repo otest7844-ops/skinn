@@ -918,8 +918,8 @@ export default function SoccerArena({ onClose, room = null, onAction }: SoccerAr
   }, [phase])
 
   const isDone = phase === 'goal' || phase === 'saved' || phase === 'missed'
-  const displayedScore = room?.gameState.scores?.[room.yourSlot] ?? playerScore
-  const opponentScore = room ? room.gameState.scores?.[1 - room.yourSlot] ?? 0 : keeperScore
+  const displayedScore = room?.gameState?.scores?.[room.yourSlot] ?? playerScore
+  const opponentScore = room ? room.gameState?.scores?.[1 - room.yourSlot] ?? 0 : keeperScore
 
   return (
     <div className="fixed inset-0 z-[120] bg-[#070913] text-white flex flex-col overflow-hidden select-none">
@@ -938,12 +938,12 @@ export default function SoccerArena({ onClose, room = null, onAction }: SoccerAr
         <div className="flex items-center gap-3">
           <div className="text-center">
             <div className="text-[9px] font-bold text-purple-400 uppercase tracking-wider">Toi</div>
-            <div className="text-2xl font-black text-white leading-none">{room?.gameState.scores?.[room.yourSlot] ?? playerScore}</div>
+            <div className="text-2xl font-black text-white leading-none">{room?.gameState?.scores?.[room.yourSlot] ?? playerScore}</div>
           </div>
           <div className="text-slate-500 font-black text-lg">–</div>
           <div className="text-center">
             <div className="text-[9px] font-bold text-red-400 uppercase tracking-wider">{room ? room.players.find((player) => !player.you)?.name ?? 'Adversaire' : 'Gardien'}</div>
-            <div className="text-2xl font-black text-white leading-none">{room ? room.gameState.scores?.[1 - room.yourSlot] ?? 0 : keeperScore}</div>
+            <div className="text-2xl font-black text-white leading-none">{room ? room.gameState?.scores?.[1 - room.yourSlot] ?? 0 : keeperScore}</div>
           </div>
           <div className="ml-2 text-[10px] text-slate-500 font-bold">
             {kick}/5

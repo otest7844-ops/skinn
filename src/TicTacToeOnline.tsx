@@ -3,7 +3,9 @@ import { ArrowLeft, Check, Clipboard, LoaderCircle, Users, Wifi, WifiOff } from 
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './MosswingOnline.css'
+import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
+import { getDemoWalletId } from './demo-wallet'
 
 type Player = { slot: number; you: boolean; name: string; connected: boolean; ready: boolean }
 type Room = {
@@ -15,6 +17,8 @@ type Room = {
   players: Player[]
   gameState: { board: number[]; turn: number; scores: number[]; winner: number | null }
   yourSlot: number
+  stake?: number
+  payout?: number
 }
 type Ack = { ok: boolean; error?: string; code?: string; token?: string }
 type View = 'menu' | 'join' | 'waiting' | 'playing' | 'result' | 'solo'
@@ -66,7 +70,13 @@ function emitAck(socket: Socket, event: string, payload: object = {}) {
   })
 }
 
-export default function TicTacToeOnline({ onClose }: { onClose: () => void }) {
+export default function TicTacToeOnline({
+  onClose,
+  publicJoin = null,
+}: {
+  onClose: () => void
+  publicJoin?: { game: string; code: string; stake: number } | null
+}) {
   const [view, setView] = useState<View>('menu')
   const [room, setRoom] = useState<Room | null>(null)
   const [nickname, setNickname] = useState('')
@@ -80,6 +90,8 @@ export default function TicTacToeOnline({ onClose }: { onClose: () => void }) {
   const socketRef = useRef<Socket | null>(null)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const roomRef = useRef<Room | null>(null)
+  const attemptedPublicJoinRef = useRef('')
+  const nicknameRef = useRef('')
 
   useEffect(() => {
     let active = true
@@ -109,6 +121,23 @@ export default function TicTacToeOnline({ onClose }: { onClose: () => void }) {
     socket.on('connect', () => {
       setConnected(true)
       setFeedback('')
+      const publicJoinKey = publicJoin?.game === 'tic-tac-toe'
+        ? `${publicJoin.game}:${publicJoin.code}:${publicJoin.stake}`
+        : ''
+      if (publicJoin && publicJoin.game === 'tic-tac-toe'
+        && publicJoinKey && attemptedPublicJoinRef.current !== publicJoinKey) {
+        attemptedPublicJoinRef.current = publicJoinKey
+        socket.emit('arena:room:join', {
+          game: 'tic-tac-toe',
+          code: publicJoin.code,
+          stake: publicJoin.stake,
+          name: nicknameRef.current,
+          walletId: getDemoWalletId(),
+        }, (result: Ack) => {
+          if (!result?.ok) setFeedback(result.error ?? 'Impossible de rejoindre ce salon.')
+        })
+        return
+      }
       const saved = window.sessionStorage.getItem('tic-tac-toe-online-room')
       if (!saved) {
         if (roomRef.current) {
@@ -152,12 +181,19 @@ export default function TicTacToeOnline({ onClose }: { onClose: () => void }) {
       setView(next.phase === 'finished' ? 'result'
         : ['running', 'paused'].includes(next.phase) ? 'playing' : 'waiting')
     })
-    socket.on('arena:closed', () => {
+    socket.on('arena:expired', ({ message }: { message?: string }) => {
       window.sessionStorage.removeItem('tic-tac-toe-online-room')
       roomRef.current = null
       setRoom(null)
       setView('menu')
-      setFeedback('La salle a été fermée.')
+      setFeedback(message ?? 'Le salon a expiré.')
+    })
+    socket.on('arena:closed', ({ reason }: { reason?: string } = {}) => {
+      window.sessionStorage.removeItem('tic-tac-toe-online-room')
+      roomRef.current = null
+      setRoom(null)
+      setView('menu')
+      setFeedback(reason ?? 'La salle a été fermée.')
     })
     socket.on('arena:room:joined', ({ code, token }: { code: string; token: string }) => {
       window.sessionStorage.setItem('tic-tac-toe-online-room', JSON.stringify({ code, token }))
@@ -167,7 +203,7 @@ export default function TicTacToeOnline({ onClose }: { onClose: () => void }) {
       socket.disconnect()
       socketRef.current = null
     }
-  }, [])
+  }, [publicJoin, publicJoin?.code, publicJoin?.game, publicJoin?.stake])
 
   useEffect(() => {
     if (room?.phase !== 'countdown') return
@@ -277,7 +313,7 @@ export default function TicTacToeOnline({ onClose }: { onClose: () => void }) {
             {view === 'menu' && <>
               <span className="mosswing-eyebrow">QUANTUM DUEL · 1 CONTRE 1</span>
               <h1>Choisissez votre partie</h1>
-              <label className="mosswing-name-field"><span>Votre pseudo</span><input value={nickname} maxLength={18} onChange={(event) => setNickname(event.target.value)} placeholder="Pilote" /></label>
+              <label className="mosswing-name-field"><span>Votre pseudo</span><input value={nickname} maxLength={18} onChange={(event) => { nicknameRef.current = event.target.value; setNickname(event.target.value) }} placeholder="Pilote" /></label>
               <div className="mosswing-actions">
                 <button type="button" className="mosswing-primary" onClick={() => { setView('solo'); setFrameReady(false) }}>Jouer en solo</button>
                 <button type="button" className="mosswing-primary" disabled={!connected} onClick={() => void createRoom()}><Users size={18} /> Créer une salle</button>
@@ -344,6 +380,12 @@ export default function TicTacToeOnline({ onClose }: { onClose: () => void }) {
         </section>
       )}
       {view === 'solo' && <div className="mosswing-solo-controls"><button type="button" onClick={() => setView('menu')} aria-label="Retour au menu"><ArrowLeft size={19} /></button><span>Mode solo</span></div>}
+      <RoomCeremony
+        room={room}
+        title="Quantum Duel"
+        countdown={room?.phase === 'countdown' ? countdown : null}
+        winnerSlot={room?.gameState.winner ?? null}
+      />
     </main>
   )
 }

@@ -12,7 +12,7 @@ test('creates a deterministic match and authorizes only the firing player', () =
   const first = createCannonDuelState(42)
   const second = createCannonDuelState(42)
   assert.deepEqual(first.players.map((player) => player.phase), second.players.map((player) => player.phase))
-  assert.deepEqual(first.players.map((player) => player.hp), [3, 3])
+  assert.deepEqual(first.players.map((player) => player.hp), [20, 20])
   assert.equal(applyCannonDuelInput(first, 0, { type: 'fire', slot: 1 }), false)
   assert.equal(applyCannonDuelInput(first, 0, { type: 'fire' }), true)
   assert.equal(first.bullets[0].owner, 0)
@@ -49,7 +49,7 @@ test('simulates projectile gravity, opposing projectile clashes, and damage auth
     age: 0,
   }]
   tickCannonDuel(state, 0.01)
-  assert.equal(state.players[1].hp, 2)
+  assert.equal(state.players[1].hp, 19)
   assert.deepEqual(state.score, [1, 0])
   assert.ok(state.effects.some((effect) => effect.type === 'hit'))
 })

@@ -38,3 +38,29 @@ test('Ping-Pong input cannot move another player or serve out of turn', () => {
   assert.equal(applyAuthoritativeInput(game, 0, { type: 'serve' }), true)
   assert.equal(game.state, 'play')
 })
+
+test('Ping-Pong paddles can return fast balls crossing either end of the table', () => {
+  const game = createAuthoritativeGame('ping-pong')
+  game.state = 'play'
+  game.hitter = 1
+  game.receivedBounces = 1
+  game.ball = { x: 0, y: 0.05, z: 0.2, vx: 0, vy: -25, vz: 0 }
+
+  tickAuthoritativeGame(game, 0.02)
+
+  assert.equal(game.state, 'play')
+  assert.equal(game.hitter, 0)
+  assert.ok(game.ball.vy > 0)
+  assert.deepEqual(game.score, [0, 0])
+
+  game.hitter = 0
+  game.receivedBounces = 1
+  game.ball = { x: 0, y: 2.69, z: 0.3, vx: 0, vy: 25, vz: 0 }
+
+  tickAuthoritativeGame(game, 0.02)
+
+  assert.equal(game.state, 'play')
+  assert.equal(game.hitter, 1)
+  assert.ok(game.ball.vy < 0)
+  assert.deepEqual(game.score, [0, 0])
+})

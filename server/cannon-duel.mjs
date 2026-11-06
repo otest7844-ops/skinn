@@ -56,7 +56,7 @@ export function createCannonDuelState(seed = 1) {
     effects: [],
     players: [0, 1].map((slot) => ({
       slot,
-      hp: 3,
+      hp: 20,
       cooldown: 0,
       phase: nextRandom(randomState),
       flash: 0,

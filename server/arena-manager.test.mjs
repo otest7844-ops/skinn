@@ -24,8 +24,8 @@ function waitFor(socket, event, predicate = () => true, timeout = 3000) {
   })
 }
 
-async function setup(context, game, countdownMs = 20) {
-  const server = createMosswingServer({ port: 0, countdownMs })
+async function setup(context, game, countdownMs = 20, stake = 0) {
+  const server = createMosswingServer({ port: 0, countdownMs, roomGraceMs: 30 })
   const address = await server.start()
   const sockets = []
   context.after(async () => {
@@ -40,12 +40,442 @@ async function setup(context, game, countdownMs = 20) {
   }
   const first = await connect()
   const second = await connect()
-  const created = await emitAck(first, 'arena:room:create', { game, name: 'Pilote A' })
+  const created = await emitAck(first, 'arena:room:create', { game, name: 'Pilote A', stake })
   assert.equal(created.ok, true)
-  const joined = await emitAck(second, 'arena:room:join', { game, code: created.code, name: 'Pilote B' })
+  const joined = await emitAck(second, 'arena:room:join', { game, code: created.code, name: 'Pilote B', stake })
   assert.equal(joined.ok, true)
   return { server, first, second, created, joined }
 }
+
+test('creates and joins rooms for every supported arena game, including public Canon Duel rooms', async (context) => {
+  const server = createMosswingServer({ port: 0 })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  const games = [
+    'tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush',
+    'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'forest-bridge', 'damned-maze', 'princess-race',
+    'grotte-aux-couteaux', 'colonnes-du-canyon',
+  ]
+  for (const game of games) {
+    const host = await connect()
+    const guest = await connect()
+    const waitingForHost = waitFor(host, 'arena:state', (state) => state.game === game && state.players.length === 1)
+    const created = await emitAck(host, 'arena:room:create', {
+      game,
+      name: 'Hôte',
+      isPublic: game === 'cannon-duel',
+      stake: game === 'cannon-duel' ? 1 : 0,
+    })
+    assert.equal(created.ok, true, `${game} room creation`)
+    await waitingForHost
+
+    const waitingForGuest = waitFor(guest, 'arena:state', (state) => state.game === game && state.players.length === 2)
+    const joined = await emitAck(guest, 'arena:room:join', {
+      game,
+      code: created.code,
+      name: 'Invité',
+      stake: game === 'cannon-duel' ? 1 : 0,
+    })
+    assert.equal(joined.ok, true, `${game} room join`)
+    assert.equal((await waitingForGuest).yourSlot, 1)
+  }
+})
+
+test('runs Grotte aux Couteaux from validated movement input and broadcasts shared positions', async (context) => {
+  const { server, first, second, created } = await setup(context, 'grotte-aux-couteaux', 15, 100)
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const initial = await waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const initialZ = initial.gameState.players[0].z
+  assert.equal((await emitAck(first, 'arena:input', { input: { direction: -1 } })).ok, true)
+  const [hostUpdate, guestUpdate] = await Promise.all([
+    waitFor(first, 'arena:state', (state) => state.phase === 'running' && state.gameState.players[0].z < initialZ),
+    waitFor(second, 'arena:state', (state) => state.phase === 'running' && state.gameState.players[0].z < initialZ),
+  ])
+  assert.equal(hostUpdate.gameState.players[0].z, guestUpdate.gameState.players[0].z)
+  assert.equal((await emitAck(first, 'arena:input', { input: { z: 100, lives: 0 } })).ok, false)
+  assert.equal(hostUpdate.gameState.players[0].lives, 20)
+  const room = server.arenaRooms.get(created.code)
+  room.gameState.status = 'finished'
+  room.gameState.winner = 0
+  const finished = await waitFor(first, 'arena:state', (state) => state.phase === 'finished')
+  assert.equal(finished.winnerSlot, 0)
+  assert.equal(finished.payout, 200)
+})
+
+test('runs Colonnes du Canyon with server-side movement and a shared course', async (context) => {
+  const { server, first, second, created } = await setup(context, 'colonnes-du-canyon', 15, 100)
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const initial = await waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const initialX = initial.gameState.players[0].x
+  assert.equal((await emitAck(first, 'arena:input', { input: { right: true } })).ok, true)
+  const [hostUpdate, guestUpdate] = await Promise.all([
+    waitFor(first, 'arena:state', (state) => state.phase === 'running' && state.gameState.players[0].x > initialX),
+    waitFor(second, 'arena:state', (state) => state.phase === 'running' && state.gameState.players[0].x > initialX),
+  ])
+  assert.equal(hostUpdate.gameState.players[0].x, guestUpdate.gameState.players[0].x)
+  assert.equal(hostUpdate.gameState.pillars.length, 20)
+  assert.equal((await emitAck(first, 'arena:input', { input: { x: 10000 } })).ok, false)
+  const room = server.arenaRooms.get(created.code)
+  room.gameState.status = 'finished'
+  room.gameState.winner = 1
+  const finished = await waitFor(second, 'arena:state', (state) => state.phase === 'finished')
+  assert.equal(finished.winnerSlot, 1)
+  assert.equal(finished.payout, 200)
+})
+
+test('runs Princess Race with server dice, pays the winner in demo credits, and supports a rematch', async (context) => {
+  const server = createMosswingServer({ port: 0, countdownMs: 15, forestFinishedMs: 60_000 })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  const first = await connect()
+  const second = await connect()
+  const wallets = ['princess-race-host-wallet', 'princess-race-guest-wallet']
+  const created = await emitAck(first, 'arena:room:create', {
+    game: 'princess-race', name: 'Chevalier OR', walletId: wallets[0], stake: 100, isPublic: true,
+  })
+  assert.equal(created.ok, true)
+  const joined = await emitAck(second, 'arena:room:join', {
+    game: 'princess-race', code: created.code, name: 'Chevalier BLEU', walletId: wallets[1], stake: 100,
+  })
+  assert.equal(joined.ok, true)
+
+  const started = Promise.all([
+    waitFor(first, 'arena:state', (state) => state.phase === 'running'),
+    waitFor(second, 'arena:state', (state) => state.phase === 'running'),
+  ])
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const [firstRunning, secondRunning] = await started
+  assert.deepEqual(firstRunning.gameState, secondRunning.gameState)
+  assert.deepEqual(firstRunning.gameState.positions, [0, 0])
+  assert.deepEqual(firstRunning.gameState.redDice, [3, 3])
+  assert.equal((await emitAck(second, 'arena:input', { input: { die: 'white' } })).ok, false)
+
+  const firstAction = waitFor(first, 'arena:state', (state) => state.gameState?.lastAction?.id === 1)
+  assert.equal((await emitAck(first, 'arena:input', { input: { die: 'red', result: 6 } })).ok, true)
+  const afterAttack = await firstAction
+  assert.equal(afterAttack.gameState.lastAction.result >= 1 && afterAttack.gameState.lastAction.result <= 6, true)
+  assert.equal(afterAttack.gameState.redDice[0], 2)
+  assert.equal((await emitAck(first, 'arena:input', { input: { die: 'white' } })).ok, false)
+
+  let state = afterAttack.gameState
+  while (state.winner === null) {
+    const player = state.turn === 0 ? first : second
+    const nextActionId = state.actionSeq + 1
+    const update = waitFor(player, 'arena:state', (next) => next.gameState?.actionSeq === nextActionId)
+    assert.equal((await emitAck(player, 'arena:input', { input: { die: 'white' } })).ok, true)
+    state = (await update).gameState
+  }
+
+  const finished = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out waiting for settled Princess Race room')), 3000)
+    const check = () => {
+      const room = server.arenaRooms.get(created.code)
+      if (room?.phase !== 'finished' || !room.settled) return setTimeout(check, 5)
+      clearTimeout(timer)
+      resolve(room)
+    }
+    check()
+  })
+  assert.equal(finished.winnerSlot, state.winner)
+  assert.equal(finished.payout, 200)
+
+  async function balance(socket, walletId) {
+    const response = waitFor(socket, 'arena:demo-wallet')
+    socket.emit('arena:demo-wallet:request', { walletId })
+    return (await response).balance
+  }
+  assert.equal(await balance(state.winner === 0 ? first : second, wallets[state.winner]), 10_100)
+  assert.equal(await balance(state.winner === 0 ? second : first, wallets[1 - state.winner]), 9_900)
+
+  const rematchStarted = waitFor(first, 'arena:state', (next) => next.phase === 'running' && next.round === 2)
+  await Promise.all([
+    emitAck(first, 'arena:room:rematch', { ready: true }),
+    emitAck(second, 'arena:room:rematch', { ready: true }),
+  ])
+  const rematch = await rematchStarted
+  assert.deepEqual(rematch.gameState.positions, [0, 0])
+  assert.deepEqual(rematch.gameState.redDice, [3, 3])
+})
+
+test('restores a Princess Race room and its authoritative progress after reconnection', async (context) => {
+  const server = createMosswingServer({ port: 0, countdownMs: 15, forestDisconnectMs: 100 })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  let first = await connect()
+  const second = await connect()
+  const created = await emitAck(first, 'arena:room:create', { game: 'princess-race' })
+  await emitAck(second, 'arena:room:join', { game: 'princess-race', code: created.code })
+  const started = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await started
+  const moved = waitFor(first, 'arena:state', (state) => state.gameState?.actionSeq === 1)
+  await emitAck(first, 'arena:input', { input: { die: 'white' } })
+  const beforeDisconnect = await moved
+  const paused = waitFor(second, 'arena:state', (state) => state.phase === 'paused')
+  first.disconnect()
+  await paused
+
+  first = await connect()
+  const restored = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  assert.equal((await emitAck(first, 'arena:room:reconnect', { code: created.code, token: created.token })).ok, true)
+  const resumed = await restored
+  assert.deepEqual(resumed.gameState.positions, beforeDisconnect.gameState.positions)
+  assert.deepEqual(resumed.gameState.redDice, beforeDisconnect.gameState.redDice)
+  assert.equal(resumed.gameState.actionSeq, beforeDisconnect.gameState.actionSeq)
+})
+
+test('shares the seeded maze and validates movement for both online players', async (context) => {
+  const { first, second } = await setup(context, 'damned-maze')
+  const running = Promise.all([
+    waitFor(first, 'arena:state', (state) => state.phase === 'running'),
+    waitFor(second, 'arena:state', (state) => state.phase === 'running'),
+  ])
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const [firstState, secondState] = await running
+  assert.equal(firstState.gameState.game, 'damned-maze')
+  assert.deepEqual(firstState.gameState.maze, secondState.gameState.maze)
+  assert.ok(firstState.gameState.monsters.length > 0)
+  assert.deepEqual(firstState.gameState.monsters, secondState.gameState.monsters)
+  assert.equal(firstState.gameState.floorTiles, undefined)
+  assert.equal(firstState.gameState.players[0].input, undefined)
+
+  assert.equal((await emitAck(first, 'arena:input', { input: { x: 2, z: 0 } })).ok, false)
+  const start = firstState.gameState.players[0]
+  const { grid, startX, startY } = firstState.gameState.maze
+  const direction = [
+    { x: 1, z: 0, dx: 1, dy: 0, axis: 'x' },
+    { x: -1, z: 0, dx: -1, dy: 0, axis: 'x' },
+    { x: 0, z: 1, dx: 0, dy: 1, axis: 'z' },
+    { x: 0, z: -1, dx: 0, dy: -1, axis: 'z' },
+  ].find(({ dx, dy }) => grid[startY + dy]?.[startX + dx] === 0)
+  assert.ok(direction)
+  const firstMoved = waitFor(first, 'arena:state', (state) => Math.abs(state.gameState.players[0][direction.axis] - start[direction.axis]) > 0.1)
+  const secondMoved = waitFor(second, 'arena:state', (state) => Math.abs(state.gameState.players[0][direction.axis] - start[direction.axis]) > 0.1)
+  assert.equal((await emitAck(first, 'arena:input', { input: { x: direction.x, z: direction.z } })).ok, true)
+  const [movedByFirst, movedBySecond] = await Promise.all([firstMoved, secondMoved])
+  assert.equal(movedByFirst.gameState.players[0].z, movedBySecond.gameState.players[0].z)
+
+  const secondStart = movedByFirst.gameState.players[1]
+  const playerOneMoved = waitFor(first, 'arena:state', (state) =>
+    Math.abs(state.gameState.players[1][direction.axis] - secondStart[direction.axis]) > 0.1)
+  const playerTwoMoved = waitFor(second, 'arena:state', (state) =>
+    Math.abs(state.gameState.players[1][direction.axis] - secondStart[direction.axis]) > 0.1)
+  assert.equal((await emitAck(second, 'arena:input', {
+    input: { x: direction.x, z: direction.z },
+  })).ok, true)
+  const [guestState, hostState] = await Promise.all([playerOneMoved, playerTwoMoved])
+  assert.deepEqual(guestState.gameState.players, hostState.gameState.players)
+  assert.ok(Math.abs(guestState.gameState.players[1][direction.axis] - secondStart[direction.axis]) > 0.1)
+})
+
+test('pays the authoritative maze winner from the demo-credit stake pot', async (context) => {
+  const server = createMosswingServer({ port: 0, countdownMs: 15 })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  const first = await connect()
+  const second = await connect()
+  const wallets = ['maze-stake-host-wallet', 'maze-stake-guest-wallet']
+  const created = await emitAck(first, 'arena:room:create', {
+    game: 'damned-maze', name: 'Éclaireur OR', walletId: wallets[0], stake: 100,
+  })
+  assert.equal(created.ok, true)
+  assert.equal((await emitAck(second, 'arena:room:join', {
+    game: 'damned-maze', code: created.code, name: 'Éclaireur BLEU', walletId: wallets[1], stake: 100,
+  })).ok, true)
+  const started = Promise.all([
+    waitFor(first, 'arena:state', (state) => state.phase === 'running'),
+    waitFor(second, 'arena:state', (state) => state.phase === 'running'),
+  ])
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await started
+
+  const room = server.arenaRooms.get(created.code)
+  room.gameState.status = 'finished'
+  room.gameState.winner = 1
+  room.gameState.result = 'win'
+  room.gameState.players[0].status = 'dead'
+  room.gameState.players[1].status = 'won'
+  const result = await waitFor(first, 'arena:state', (state) => state.phase === 'finished')
+  assert.equal(result.winnerSlot, 1)
+  assert.equal(result.payout, 200)
+
+  async function getBalance(socket, walletId) {
+    const update = waitFor(socket, 'arena:demo-wallet')
+    socket.emit('arena:demo-wallet:request', { walletId })
+    return (await update).balance
+  }
+  assert.equal(await getBalance(first, wallets[0]), 9_900)
+  assert.equal(await getBalance(second, wallets[1]), 10_100)
+})
+
+test('expires a waiting maze room and removes a fully empty maze room', async (context) => {
+  const server = createMosswingServer({
+    port: 0,
+    mazeWaitingMs: 30,
+    mazeEmptyMs: 30,
+    mazeDisconnectMs: 40,
+  })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  const host = await connect()
+  const expired = waitFor(host, 'arena:expired')
+  const closed = waitFor(host, 'arena:closed')
+  const waitingRoom = await emitAck(host, 'arena:room:create', { game: 'damned-maze' })
+  assert.equal(waitingRoom.ok, true)
+  assert.match((await expired).message, /10 minutes/)
+  await closed
+  assert.equal(server.arenaRooms.has(waitingRoom.code), false)
+
+  const emptyRoom = await emitAck(host, 'arena:room:create', { game: 'damned-maze' })
+  assert.equal(emptyRoom.ok, true)
+  host.disconnect()
+  await new Promise((resolve) => setTimeout(resolve, 90))
+  assert.equal(server.arenaRooms.has(emptyRoom.code), false)
+})
+
+test('reconnects maze players without losing state and ends an unrecovered round', async (context) => {
+  const server = createMosswingServer({
+    port: 0,
+    countdownMs: 15,
+    mazeDisconnectMs: 45,
+    mazeFinishedMs: 35,
+  })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  let first = await connect()
+  const second = await connect()
+  const created = await emitAck(first, 'arena:room:create', { game: 'damned-maze' })
+  assert.equal((await emitAck(second, 'arena:room:join', { game: 'damned-maze', code: created.code })).ok, true)
+  const running = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const beforeDisconnect = await running
+
+  const paused = waitFor(second, 'arena:state', (state) => state.phase === 'paused')
+  first.disconnect()
+  await paused
+  first = await connect()
+  const restored = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  assert.equal((await emitAck(first, 'arena:room:reconnect', { code: created.code, token: created.token })).ok, true)
+  const reconnectedState = await restored
+  assert.deepEqual(reconnectedState.gameState.maze, beforeDisconnect.gameState.maze)
+  assert.deepEqual(reconnectedState.gameState.players, beforeDisconnect.gameState.players)
+
+  const finished = waitFor(second, 'arena:state', (state) => state.phase === 'finished')
+  const expired = waitFor(second, 'arena:closed')
+  first.disconnect()
+  const result = await finished
+  assert.equal(result.gameState.winner, 1)
+  assert.equal(result.gameState.result, 'opponent-disconnected')
+  await expired
+  assert.equal(server.arenaRooms.has(created.code), false)
+})
+
+test('expires forest, princess, and new game rooms through their configured waiting timeout', async (context) => {
+  const server = createMosswingServer({ port: 0, forestWaitingMs: 25 })
+  const address = await server.start()
+  const host = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+  context.after(async () => {
+    host.disconnect()
+    await server.stop()
+  })
+  await once(host, 'connect')
+  for (const game of ['forest-bridge', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon']) {
+    const expired = waitFor(host, 'arena:expired')
+    const closed = waitFor(host, 'arena:closed')
+    const created = await emitAck(host, 'arena:room:create', { game })
+    assert.equal(created.ok, true)
+    assert.match((await expired).message, /10 minutes/)
+    await closed
+    assert.equal(server.arenaRooms.has(created.code), false)
+  }
+})
 
 test('validates Tic-Tac-Toe turns and synchronizes the winning board', async (context) => {
   const { first, second } = await setup(context, 'tic-tac-toe')
@@ -69,6 +499,111 @@ test('validates Tic-Tac-Toe turns and synchronizes the winning board', async (co
   assert.deepEqual(result.gameState.board, [1, 1, 1, 2, 2, 0, 0, 0, 0])
   assert.equal(result.gameState.winner, 0)
   assert.deepEqual(result.gameState.scores, [1, 0])
+})
+
+test('shares the server-generated Memory board and enforces alternating turns', async (context) => {
+  const { first, second } = await setup(context, 'memo-5x5')
+  const started = Promise.all([
+    waitFor(first, 'arena:state', (state) => state.phase === 'running'),
+    waitFor(second, 'arena:state', (state) => state.phase === 'running'),
+  ])
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const [firstState, secondState] = await started
+  assert.deepEqual(firstState.gameState.cards, secondState.gameState.cards)
+  assert.equal(firstState.gameState.cards.length, 25)
+  assert.equal(firstState.gameState.cards.filter((card) => card.isStar).length, 1)
+
+  const matchingIds = new Map()
+  for (const card of firstState.gameState.cards.filter((item) => !item.isStar)) {
+    matchingIds.set(card.symbol, [...(matchingIds.get(card.symbol) ?? []), card.id])
+  }
+  const pair = [...matchingIds.values()][0]
+  const revealedBySecond = waitFor(second, 'arena:state', (state) => state.gameState.opened.length === 1)
+  assert.equal((await emitAck(first, 'arena:game:action', { type: 'memory-flip', cardId: pair[0] })).ok, true)
+  assert.equal((await revealedBySecond).gameState.cards[pair[0]].faceUp, true)
+  assert.equal((await emitAck(second, 'arena:game:action', { type: 'memory-flip', cardId: pair[1] })).ok, false)
+
+  const matchedBySecond = waitFor(second, 'arena:state', (state) => state.gameState.scores[0] === 1)
+  assert.equal((await emitAck(first, 'arena:game:action', { type: 'memory-flip', cardId: pair[1] })).ok, true)
+  const result = await matchedBySecond
+  assert.equal(result.gameState.turn, 0)
+  assert.ok(result.gameState.cards[pair[0]].matched && result.gameState.cards[pair[1]].matched)
+})
+
+test('lists public rooms, requires equal demo stakes, and pays the winner from the server escrow', async (context) => {
+  const server = createMosswingServer({ port: 0, countdownMs: 20 })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  const first = await connect()
+  const second = await connect()
+  const firstWallet = 'wallet-player-one'
+  const secondWallet = 'wallet-player-two'
+  const secondInitialBalance = waitFor(second, 'arena:demo-wallet', (wallet) => wallet.balance === 10_000)
+  second.emit('arena:demo-wallet:request', { walletId: secondWallet })
+  assert.equal((await secondInitialBalance).balance, 10_000)
+  const firstBalance = waitFor(first, 'arena:demo-wallet', (wallet) => wallet.balance === 9_900)
+  const roomListed = waitFor(first, 'arena:public-rooms', (rooms) => rooms.some((room) => room.stake === 100))
+  const created = await emitAck(first, 'arena:room:create', {
+    game: 'tic-tac-toe',
+    name: 'Joueur A',
+    walletId: firstWallet,
+    isPublic: true,
+    stake: 100,
+  })
+  assert.equal(created.ok, true)
+  assert.equal((await firstBalance).balance, 9_900)
+  assert.equal((await roomListed)[0].stake, 100)
+
+  assert.equal((await emitAck(second, 'arena:room:join', {
+    game: 'tic-tac-toe',
+    code: created.code,
+    walletId: secondWallet,
+    stake: 50,
+  })).ok, false)
+  const secondBalance = waitFor(second, 'arena:demo-wallet', (wallet) => wallet.balance === 9_900)
+  const roomRemoved = waitFor(first, 'arena:public-rooms', (rooms) => !rooms.some((room) => room.code === created.code))
+  assert.equal((await emitAck(second, 'arena:room:join', {
+    game: 'tic-tac-toe',
+    code: created.code,
+    walletId: secondWallet,
+    stake: 100,
+  })).ok, true)
+  assert.equal((await secondBalance).balance, 9_900)
+  await roomRemoved
+
+  const started = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await started
+  await emitAck(first, 'arena:ttt:move', { cell: 0 })
+  await emitAck(second, 'arena:ttt:move', { cell: 3 })
+  await emitAck(first, 'arena:ttt:move', { cell: 1 })
+  await emitAck(second, 'arena:ttt:move', { cell: 4 })
+  const winnerWallet = waitFor(first, 'arena:demo-wallet', (wallet) => wallet.balance === 10_100)
+  const loserWallet = waitFor(second, 'arena:demo-wallet', (wallet) => wallet.balance === 9_900)
+  const finished = waitFor(first, 'arena:state', (state) => state.phase === 'finished')
+  assert.equal((await emitAck(first, 'arena:ttt:move', { cell: 2 })).ok, true)
+  const state = await finished
+  assert.equal(state.winnerSlot, 0)
+  assert.equal(state.payout, 200)
+  assert.equal((await winnerWallet).balance, 10_100)
+  assert.equal((await loserWallet).balance, 9_900)
 })
 
 test('scores two five-shot Football 19 rounds in shared room state', async (context) => {
@@ -188,7 +723,7 @@ test('runs Basketball from server physics and accepts only turn-legal shots', as
   assert.equal((await emitAck(first, 'arena:room:finish')).ok, false)
 })
 
-test('validates both Ball Rush runners and finishes when both are eliminated', async (context) => {
+test('ends Ball Rush when a runner reaches 20 obstacle hits and awards the opponent', async (context) => {
   const { first, second } = await setup(context, 'ball-rush')
   const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
   const secondStarted = waitFor(second, 'arena:state', (state) => state.phase === 'running')
@@ -198,7 +733,7 @@ test('validates both Ball Rush runners and finishes when both are eliminated', a
   ])
   await Promise.all([firstStarted, secondStarted])
 
-  const firstSnapshot = { x: -2.4, y: 0, lane: 0, score: 42, coins: 3, alive: true }
+  const firstSnapshot = { x: -2.4, y: 0, lane: 0, score: 42, coins: 3, hits: 0, alive: true }
   assert.equal((await emitAck(first, 'arena:state', { state: firstSnapshot })).ok, true)
   assert.equal((await emitAck(second, 'arena:state', { state: { ...firstSnapshot, score: -1 } })).ok, false)
   await new Promise((resolve) => setTimeout(resolve, 200))
@@ -210,17 +745,25 @@ test('validates both Ball Rush runners and finishes when both are eliminated', a
     state: { ...firstSnapshot, score: 1000 },
   })).ok, false)
 
-  assert.equal((await emitAck(first, 'arena:state', {
-    state: { ...firstSnapshot, score: 52, alive: false },
-  })).ok, true)
-
+  for (let hits = 1; hits < 20; hits += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    const snapshot = { ...firstSnapshot, score: 52, hits, alive: true }
+    assert.equal((await emitAck(first, 'arena:state', { state: snapshot })).ok, true)
+  }
   const finished = waitFor(second, 'arena:state', (state) => state.phase === 'finished')
-  assert.equal((await emitAck(second, 'arena:state', {
-    state: { x: 2.4, y: 1.5, lane: 2, score: 31, coins: 1, alive: false },
-  })).ok, true)
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  const finalSnapshot = { ...firstSnapshot, score: 52, hits: 20, alive: false }
+  assert.equal((await emitAck(first, 'arena:state', { state: finalSnapshot })).ok, true)
   const result = await finished
-  assert.deepEqual(result.gameState.players.map((player) => player.alive), [false, false])
-  assert.deepEqual(result.gameState.players.map((player) => player.score), [52, 31])
+  assert.equal(result.winnerSlot, 1)
+  assert.equal(result.gameState.status, 'finished')
+  assert.equal(result.gameState.winner, 1)
+  assert.equal(result.gameState.players[0].hits, 20)
+  assert.equal(result.gameState.players[0].alive, false)
+  assert.equal(result.gameState.players[1].alive, true)
+  assert.equal((await emitAck(second, 'arena:state', {
+    state: { x: 2.4, y: 1.5, lane: 2, score: 31, coins: 1, hits: 0, alive: true },
+  })).ok, false)
 })
 
 test('locks independent Head Football selections and resumes disconnected matches', async (context) => {
@@ -272,6 +815,8 @@ test('locks independent Head Football selections and resumes disconnected matche
   const paused = waitFor(second, 'arena:state', (state) => state.phase === 'paused')
   first.disconnect()
   await paused
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  assert.equal(server.arenaRooms.has(created.code), true)
 
   const reconnect = createSocket(`http://127.0.0.1:${server.httpServer.address().port}`, {
     transports: ['websocket'],
@@ -301,18 +846,104 @@ test('runs Canon Duel inputs from both assigned player slots on shared server st
   ])
   const [firstState, secondState] = await Promise.all([firstStarted, secondStarted])
   assert.equal(firstState.gameState.status, 'playing')
-  assert.deepEqual(firstState.gameState.players.map((player) => player.hp), [3, 3])
-  assert.deepEqual(secondState.gameState.players.map((player) => player.hp), [3, 3])
+  assert.deepEqual(firstState.gameState.players.map((player) => player.hp), [20, 20])
+  assert.deepEqual(secondState.gameState.players.map((player) => player.hp), [20, 20])
   assert.equal((await emitAck(first, 'arena:input', {
     input: { type: 'fire', slot: 1 },
   })).ok, false)
 
+  const guestShot = waitFor(first, 'arena:state', (state) => state.gameState.bullets.length === 1)
+  assert.equal((await emitAck(second, 'arena:input', { input: { type: 'fire' } })).ok, true)
+  assert.deepEqual((await guestShot).gameState.bullets.map((bullet) => bullet.owner), [1])
+
   const synchronized = waitFor(second, 'arena:state', (state) => state.gameState.bullets.length === 2)
   assert.equal((await emitAck(first, 'arena:input', { input: { type: 'fire' } })).ok, true)
-  assert.equal((await emitAck(second, 'arena:input', { input: { type: 'fire' } })).ok, true)
   const snapshot = await synchronized
-  assert.deepEqual(snapshot.gameState.bullets.map((bullet) => bullet.owner), [0, 1])
+  assert.deepEqual(snapshot.gameState.bullets.map((bullet) => bullet.owner).sort(), [0, 1])
   assert.equal((await emitAck(first, 'arena:state', {
     state: { status: 'finished', winner: 0 },
   })).ok, false)
+})
+
+test('places demo sports coupons with server odds, atomic wallet debits, and idempotent retries', async (context) => {
+  const gameServer = createMosswingServer({ port: 0 })
+  const address = await gameServer.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await gameServer.stop()
+  })
+
+  const socket = createSocket(`http://127.0.0.1:${address.port}`, {
+    transports: ['websocket'],
+    reconnection: false,
+  })
+  sockets.push(socket)
+  await once(socket, 'connect')
+
+  const catalogPromise = waitFor(socket, 'arena:sportsbook:catalog')
+  socket.emit('arena:sportsbook:catalog:request')
+  const catalog = await catalogPromise
+  assert.equal(catalog.length, 5)
+  assert.equal(catalog.find((match) => match.id === 'bundesliga').homeOdds, 1.82)
+
+  const walletId = 'sportsbook-wallet-01'
+  const initialBalancePromise = waitFor(socket, 'arena:demo-wallet')
+  socket.emit('arena:demo-wallet:request', { walletId })
+  assert.equal((await initialBalancePromise).balance, 10_000)
+
+  const payload = {
+    walletId,
+    stake: 500,
+    idempotencyKey: 'coupon-test-retry-001',
+    selections: [{ matchId: 'bundesliga', option: 'V1' }],
+  }
+  const firstTicket = await emitAck(socket, 'arena:coupon:place', payload)
+  assert.equal(firstTicket.ok, true)
+  assert.equal(firstTicket.ticket.potential, 910)
+  assert.equal(firstTicket.ticket.selections[0].odds, 1.82)
+  assert.equal(firstTicket.balance, 9_500)
+
+  const retriedTicket = await emitAck(socket, 'arena:coupon:place', payload)
+  assert.equal(retriedTicket.ok, true)
+  assert.equal(retriedTicket.duplicate, true)
+  assert.equal(retriedTicket.ticket.id, firstTicket.ticket.id)
+  assert.equal(retriedTicket.balance, 9_500)
+
+  const forgedOdds = await emitAck(socket, 'arena:coupon:place', {
+    ...payload,
+    idempotencyKey: 'coupon-forged-odds-01',
+    selections: [{ matchId: 'bundesliga', option: 'V1', odds: 99 }],
+  })
+  assert.equal(forgedOdds.ok, false)
+
+  const insufficient = await emitAck(socket, 'arena:coupon:place', {
+    ...payload,
+    idempotencyKey: 'coupon-insufficient-01',
+    stake: 10_000,
+  })
+  assert.equal(insufficient.ok, false)
+  assert.match(insufficient.error, /insuffisant/)
+
+  const historyPromise = waitFor(socket, 'arena:coupon:history')
+  socket.emit('arena:coupon:history:request', { walletId })
+  assert.equal((await historyPromise).tickets.length, 1)
+
+  const concurrentWalletId = 'sportsbook-concurrent-01'
+  const concurrentResults = await Promise.all([
+    emitAck(socket, 'arena:coupon:place', {
+      walletId: concurrentWalletId,
+      stake: 7_000,
+      idempotencyKey: 'coupon-concurrent-a-01',
+      selections: [{ matchId: 'laliga', option: 'X' }],
+    }),
+    emitAck(socket, 'arena:coupon:place', {
+      walletId: concurrentWalletId,
+      stake: 7_000,
+      idempotencyKey: 'coupon-concurrent-b-01',
+      selections: [{ matchId: 'laliga', option: 'X' }],
+    }),
+  ])
+  assert.equal(concurrentResults.filter((result) => result.ok).length, 1)
+  assert.equal(concurrentResults.filter((result) => !result.ok).length, 1)
 })

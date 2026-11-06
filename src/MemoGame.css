@@ -110,6 +110,29 @@
   font-size: 1.15em;
 }
 
+.memo-players {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.memo-players span {
+  padding: 8px 11px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 0 var(--memo-shadow);
+}
+
+.memo-players span.is-active {
+  border-color: #47bc58;
+  box-shadow: 0 4px 0 #267b32, 0 0 12px rgb(71 188 88 / 55%);
+}
+
+.memo-players b {
+  margin-left: 4px;
+}
+
 .memo-restart,
 .memo-win button {
   padding: 8px 14px;

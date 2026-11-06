@@ -1,8 +1,20 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto'
 import { applyAuthoritativeInput, createAuthoritativeGame, tickAuthoritativeGame } from './authoritative-arcade.mjs'
 import { createHeadFootballMatch, sanitizeHeadFootballInput, tickHeadFootballMatch } from './head-football.mjs'
+import { createMemoMatch, flipMemoCard, tickMemoMatch } from './memo-game.mjs'
+import { applyDamnedMazeInput, createDamnedMazeState, tickDamnedMaze } from './damned-maze.mjs'
+import { applyPrincessRaceAction, createPrincessRaceState } from './princess-race.mjs'
+import {
+  applyCanyonRaceInput,
+  applyKnifeDuelInput,
+  createCanyonRaceState,
+  createKnifeDuelState,
+  tickCanyonRace,
+  tickKnifeDuel,
+} from './new-arcade-games.mjs'
+import { createDemoSportsbook } from './demo-sportsbook.mjs'
 
-const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena'])
+const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon'])
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const TAP_TICK_MS = 50
 const TAP_SNAPSHOT_MS = 100
@@ -22,6 +34,16 @@ function playerName(value, slot) {
   return name || `Joueur ${slot + 1}`
 }
 
+function clearForestTimer(room, key) {
+  if (room[key]) clearTimeout(room[key])
+  room[key] = null
+}
+
+function isForestRace(room) {
+  return room.game === 'forest-bridge' || room.game === 'princess-race'
+    || room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon'
+}
+
 function boundedObject(value, maxLength) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   try {
@@ -32,9 +54,266 @@ function boundedObject(value, maxLength) {
   }
 }
 
-export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_000 } = {}) {
+export function attachArenaManager(io, {
+  countdownMs = 3000,
+  forestWaitingMs = 10 * 60_000,
+  forestEmptyMs = 5 * 60_000,
+  forestDisconnectMs = 60_000,
+  forestFinishedMs = 2 * 60_000,
+  mazeWaitingMs = 10 * 60_000,
+  mazeEmptyMs = 5 * 60_000,
+  mazeDisconnectMs = 60_000,
+  mazeFinishedMs = 2 * 60_000,
+} = {}) {
   const rooms = new Map()
   const socketPlayers = new Map()
+  const demoWallets = new Map()
+
+  function expireForestRoom(room, reason) {
+    if (!isForestRace(room) || !rooms.has(room.code)) return
+    for (const player of room.players) {
+      if (player.connected && player.socketId) io.to(player.socketId).emit('arena:expired', { message: reason })
+    }
+    removeRoom(room, reason)
+  }
+
+  function scheduleForestExpiry(room, key, delay, reason, condition = () => true) {
+    clearForestTimer(room, key)
+    room[key] = setTimeout(() => {
+      room[key] = null
+      if (rooms.get(room.code) !== room || !condition()) return
+      expireForestRoom(room, reason)
+    }, delay)
+    room[key].unref?.()
+  }
+
+  function scheduleForestWaitingExpiry(room) {
+    if (!isForestRace(room) || room.players.length !== 1) return
+    scheduleForestExpiry(
+      room,
+      'waitingTimer',
+      forestWaitingMs,
+      'Le salon a expiré après 10 minutes sans deuxième joueur.',
+      () => room.phase === 'waiting' && room.players.length === 1,
+    )
+  }
+
+  function scheduleForestFinishedExpiry(room) {
+    if (!isForestRace(room)) return
+    scheduleForestExpiry(
+      room,
+      'finishedTimer',
+      forestFinishedMs,
+      'Le salon terminé a expiré.',
+      () => room.phase === 'finished',
+    )
+  }
+
+  function finishForestRoom(room, winnerSlot = null) {
+    if (!isForestRace(room) || room.phase === 'finished') return
+    clearForestTimer(room, 'waitingTimer')
+    stopGameTimer(room)
+    room.phase = 'finished'
+    room.winnerSlot = winnerSlot
+    if (room.gameState) {
+      room.gameState.winner = winnerSlot
+      if (room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon') {
+        room.gameState.status = 'finished'
+        room.gameState.players.forEach((state) => {
+          if (state.input?.direction !== undefined) state.input = { direction: 0, targetZ: null }
+          else state.input = { left: false, right: false, jump: false }
+        })
+      }
+    }
+    room.players.forEach((player) => { player.ready = false })
+    broadcast(room)
+    scheduleForestFinishedExpiry(room)
+  }
+
+  function scheduleForestDisconnectExpiry(room, player) {
+    if (!isForestRace(room)) return
+    clearForestTimer(room, 'disconnectTimer')
+    room.disconnectTimer = setTimeout(() => {
+      room.disconnectTimer = null
+      if (rooms.get(room.code) !== room || player.connected || room.phase === 'finished') return
+      const connectedPlayer = room.players.find((item) => item.connected)
+      if (!connectedPlayer) {
+        scheduleForestExpiry(
+          room,
+          'emptyTimer',
+          forestEmptyMs,
+          'Le salon vide a expiré après 5 minutes.',
+          () => room.players.every((item) => !item.connected),
+        )
+        return
+      }
+      finishForestRoom(room, connectedPlayer.slot)
+    }, forestDisconnectMs)
+    room.disconnectTimer.unref?.()
+  }
+
+  function clearMazeTimer(room, key) {
+    if (room[key]) clearTimeout(room[key])
+    room[key] = null
+  }
+
+  function expireMazeRoom(room, reason) {
+    if (room.game !== 'damned-maze' || !rooms.has(room.code)) return
+    for (const player of room.players) {
+      if (player.connected && player.socketId) io.to(player.socketId).emit('arena:expired', { message: reason })
+    }
+    removeRoom(room, reason)
+  }
+
+  function scheduleMazeExpiry(room, key, delay, reason, condition = () => true) {
+    clearMazeTimer(room, key)
+    room[key] = setTimeout(() => {
+      room[key] = null
+      if (rooms.get(room.code) !== room || !condition()) return
+      expireMazeRoom(room, reason)
+    }, delay)
+    room[key].unref?.()
+  }
+
+  function scheduleMazeWaitingExpiry(room) {
+    if (room.game !== 'damned-maze' || room.players.length !== 1) return
+    scheduleMazeExpiry(
+      room,
+      'waitingTimer',
+      mazeWaitingMs,
+      'Le salon a expiré après 10 minutes sans deuxième joueur.',
+      () => room.phase === 'waiting' && room.players.length === 1,
+    )
+  }
+
+  function scheduleMazeEmptyExpiry(room) {
+    if (room.game !== 'damned-maze' || room.players.some((player) => player.connected) || room.emptyTimer) return
+    scheduleMazeExpiry(
+      room,
+      'emptyTimer',
+      mazeEmptyMs,
+      'Le salon vide a expiré après 5 minutes.',
+      () => room.players.every((player) => !player.connected),
+    )
+  }
+
+  function scheduleMazeFinishedExpiry(room) {
+    if (room.game !== 'damned-maze') return
+    scheduleMazeExpiry(
+      room,
+      'finishedTimer',
+      mazeFinishedMs,
+      'Le salon terminé a expiré.',
+      () => room.phase === 'finished',
+    )
+  }
+
+  function finishMazeRoom(room, winnerSlot, result) {
+    if (room.game !== 'damned-maze' || room.phase === 'finished') return
+    clearMazeTimer(room, 'waitingTimer')
+    stopGameTimer(room)
+    room.phase = 'finished'
+    room.winnerSlot = winnerSlot
+    if (room.gameState) {
+      room.gameState.status = 'finished'
+      room.gameState.winner = winnerSlot
+      room.gameState.result = result
+      room.gameState.players.forEach((player, slot) => {
+        player.status = winnerSlot === null ? 'dead' : slot === winnerSlot ? 'won' : 'dead'
+        player.input = { x: 0, z: 0 }
+      })
+    }
+    room.players.forEach((player) => { player.ready = false })
+    broadcast(room)
+    scheduleMazeFinishedExpiry(room)
+  }
+
+  function scheduleMazeDisconnectExpiry(room, player) {
+    if (room.game !== 'damned-maze') return
+    scheduleMazeEmptyExpiry(room)
+    clearMazeTimer(room, 'disconnectTimer')
+    if (player.connected || room.phase === 'finished') return
+    const disconnectedPlayer = room.players
+      .filter((item) => !item.connected)
+      .sort((a, b) => (a.disconnectedAt ?? Date.now()) - (b.disconnectedAt ?? Date.now()))[0]
+    if (!disconnectedPlayer) return
+    const disconnectedAt = disconnectedPlayer.disconnectedAt ?? Date.now()
+    room.disconnectTimer = setTimeout(() => {
+      room.disconnectTimer = null
+      if (rooms.get(room.code) !== room || disconnectedPlayer.connected || room.phase === 'finished') return
+      const remainingPlayer = room.players.find((item) => item.connected)
+      if (remainingPlayer) finishMazeRoom(room, remainingPlayer.slot, 'opponent-disconnected')
+      else scheduleMazeEmptyExpiry(room)
+    }, Math.max(0, disconnectedAt + mazeDisconnectMs - Date.now()))
+    room.disconnectTimer.unref?.()
+  }
+
+  function getDemoBalance(walletId) {
+    if (!demoWallets.has(walletId)) demoWallets.set(walletId, 10_000)
+    return demoWallets.get(walletId)
+  }
+
+  function sendDemoBalance(player) {
+    if (player.connected && player.socketId) {
+      io.to(player.socketId).emit('arena:demo-wallet', { balance: getDemoBalance(player.walletId) })
+    }
+  }
+
+  function reserveDemoStake(player, stake) {
+    const balance = getDemoBalance(player.walletId)
+    if (balance < stake) return false
+    demoWallets.set(player.walletId, balance - stake)
+    return true
+  }
+
+  function addDemoCredits(walletId, amount) {
+    const balance = getDemoBalance(walletId) + amount
+    demoWallets.set(walletId, balance)
+    return balance
+  }
+
+  const demoSportsbook = createDemoSportsbook({
+    getBalance: getDemoBalance,
+    reserveStake: (walletId, stake) => {
+      const balance = getDemoBalance(walletId)
+      if (balance < stake) return false
+      demoWallets.set(walletId, balance - stake)
+      return true
+    },
+  })
+
+  function finishedWinner(room) {
+    const state = room.gameState
+    const winner = room.game === 'head-football' ? state?.match?.winner : state?.winner
+    if (winner === 0 || winner === 1) return winner
+    if (room.game === 'ball-rush' && Array.isArray(state?.players) && state.players.length === 2) {
+      const scores = state.players.map((player) => player?.score)
+      if (scores.every(Number.isFinite) && scores[0] !== scores[1]) return scores[0] > scores[1] ? 0 : 1
+    }
+    const scores = Array.isArray(state?.scores) ? state.scores
+      : Array.isArray(state?.score) ? state.score
+        : null
+    if (!scores || scores.length !== 2 || !scores.every(Number.isFinite) || scores[0] === scores[1]) return null
+    return scores[0] > scores[1] ? 0 : 1
+  }
+
+  function settleDemoPot(room) {
+    if (room.phase !== 'finished' || room.settled) return
+    room.settled = true
+    room.winnerSlot = finishedWinner(room)
+    room.payout = room.winnerSlot === null ? 0 : room.stake * 2
+    if (room.winnerSlot === null) {
+      room.players.forEach((player, slot) => {
+        const refund = room.escrowed[slot]
+        if (refund > 0) demoWallets.set(player.walletId, getDemoBalance(player.walletId) + refund)
+      })
+    } else {
+      const winner = room.players[room.winnerSlot]
+      if (winner) demoWallets.set(winner.walletId, getDemoBalance(winner.walletId) + room.payout)
+    }
+    room.escrowed = [0, 0]
+    room.players.forEach(sendDemoBalance)
+  }
 
   function makeCode() {
     let code
@@ -53,9 +332,36 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
   }
 
   function snapshot(room, recipientToken) {
+    settleDemoPot(room)
+    let gameState = room.gameState
+    if (room.game === 'forest-bridge' && gameState) {
+      gameState = { ...gameState }
+      delete gameState.traps
+    } else if ((room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon') && gameState) {
+      gameState = { ...gameState }
+      delete gameState.randomState
+    } else if (room.game === 'damned-maze' && gameState) {
+      const recipient = room.players.find((player) => player.token === recipientToken)
+      const sendMaze = recipient?.mazeSeed !== gameState.maze.seed
+      if (recipient && sendMaze) recipient.mazeSeed = gameState.maze.seed
+      gameState = {
+        ...gameState,
+        maze: sendMaze ? gameState.maze : undefined,
+        floorTiles: undefined,
+        randomState: undefined,
+        players: gameState.players.map(({ input, ...player }) => {
+          void input
+          return player
+        }),
+      }
+    }
     return {
       code: room.code,
       game: room.game,
+      isPublic: room.isPublic,
+      stake: room.stake,
+      payout: room.payout,
+      winnerSlot: room.winnerSlot,
       phase: room.phase,
       round: room.round,
       seed: room.seed,
@@ -68,7 +374,7 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
         connected: player.connected,
         ready: player.ready,
       })),
-      gameState: room.gameState,
+      gameState,
       yourSlot: room.players.findIndex((player) => player.token === recipientToken),
     }
   }
@@ -78,6 +384,23 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       if (!player.connected || !player.socketId) continue
       io.to(player.socketId).emit('arena:state', snapshot(room, player.token))
     }
+  }
+
+  function publicRoomList() {
+    return [...rooms.values()]
+      .filter((room) => room.isPublic && room.players.length < 2 && ['waiting', 'countdown'].includes(room.phase))
+      .map((room) => ({
+        code: room.code,
+        game: room.game,
+        phase: room.phase,
+        host: room.players[0]?.name ?? 'Joueur',
+        players: room.players.length,
+        stake: room.stake,
+      }))
+  }
+
+  function broadcastPublicRooms() {
+    io.emit('arena:public-rooms', publicRoomList())
   }
 
   function stopGameTimer(room) {
@@ -138,14 +461,26 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       const now = Date.now()
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTickAt) / 1000))
       lastTickAt = now
-      tickAuthoritativeGame(room.gameState, dt)
+      if (room.game === 'memo-5x5') tickMemoMatch(room.gameState, now)
+      else if (room.game === 'damned-maze') tickDamnedMaze(room.gameState, dt)
+      else if (room.game === 'grotte-aux-couteaux') tickKnifeDuel(room.gameState, dt)
+      else if (room.game === 'colonnes-du-canyon') tickCanyonRace(room.gameState, dt)
+      else tickAuthoritativeGame(room.gameState, dt)
+      if ((room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon')
+        && room.gameState.status === 'finished') {
+        finishForestRoom(room, room.gameState.winner)
+        return
+      }
       const finished = room.game === 'ping-pong'
         ? room.gameState.state === 'over'
-        : room.gameState.status === 'finished'
+        : room.game === 'forest-bridge' || room.game === 'princess-race'
+          ? room.gameState.winner !== null
+          : room.gameState.status === 'finished'
       if (finished) {
         room.phase = 'finished'
         room.players.forEach((player) => { player.ready = false })
         stopGameTimer(room)
+        if (room.game === 'damned-maze') scheduleMazeFinishedExpiry(room)
       }
       if (now - room.lastGameBroadcastAt >= 50 || finished) {
         room.lastGameBroadcastAt = now
@@ -155,34 +490,47 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
     room.gameTimer.unref?.()
   }
 
-  function removeRoom(room) {
+  function removeRoom(room, reason = null) {
     if (room.countdownTimer) clearTimeout(room.countdownTimer)
+    for (const key of ['waitingTimer', 'emptyTimer', 'disconnectTimer', 'finishedTimer']) clearForestTimer(room, key)
     stopGameTimer(room)
-    if (room.cleanupTimer) clearTimeout(room.cleanupTimer)
-    if (room.disconnectTimer) clearTimeout(room.disconnectTimer)
-    for (const player of room.players) {
+    for (const [slot, player] of room.players.entries()) {
+      const refund = room.escrowed?.[slot] ?? 0
+      if (refund > 0) {
+        demoWallets.set(player.walletId, getDemoBalance(player.walletId) + refund)
+        sendDemoBalance(player)
+        room.escrowed[slot] = 0
+      }
       if (player.socketId) socketPlayers.delete(player.socketId)
     }
     rooms.delete(room.code)
-    io.to(room.code).emit('arena:closed')
+    io.to(room.code).emit('arena:closed', { reason })
   }
 
-  function makeRoom(game, players) {
+  function makeRoom(game, players, { isPublic = false, stake = 0 } = {}) {
     const code = makeCode()
     const room = {
       code,
       game,
+      isPublic,
+      stake,
+      escrowed: [stake, 0],
+      settled: false,
+      winnerSlot: null,
+      payout: 0,
       phase: 'waiting',
       round: 0,
       seed: null,
       countdownEndsAt: null,
       countdownTimer: null,
       gameTimer: null,
+      waitingTimer: null,
+      emptyTimer: null,
+      disconnectTimer: null,
+      finishedTimer: null,
       lastGameBroadcastAt: 0,
       pausedAt: null,
       pausedFrom: null,
-      cleanupTimer: null,
-      disconnectTimer: null,
       gameState: game === 'tic-tac-toe'
         ? { board: Array(9).fill(0), turn: 0, scores: [0, 0], winner: null }
         : game === 'ball-rush'
@@ -197,24 +545,33 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       players,
     }
     rooms.set(code, room)
+    scheduleForestWaitingExpiry(room)
+    scheduleMazeWaitingExpiry(room)
     for (const player of players) {
       player.roomCode = code
       socketPlayers.set(player.socketId, { code, token: player.token })
       io.sockets.sockets.get(player.socketId)?.join(code)
     }
+    broadcastPublicRooms()
     return room
   }
 
-  function createPlayer(socket, slot, name) {
+  function createPlayer(socket, slot, name, walletValue) {
+    const walletId = typeof walletValue === 'string' && /^[a-z0-9-]{8,64}$/i.test(walletValue)
+      ? walletValue
+      : randomUUID()
     return {
       token: randomUUID(),
+      walletId,
       socketId: socket.id,
       name: playerName(name, slot),
       connected: true,
       ready: false,
       roomCode: null,
       slot,
+      mazeSeed: null,
       lastActionAt: 0,
+      disconnectedAt: null,
       input: { left: false, right: false, jump: false, kick: false, power: false },
     }
   }
@@ -227,6 +584,12 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       return
     }
     room.round += 1
+    clearForestTimer(room, 'waitingTimer')
+    clearForestTimer(room, 'emptyTimer')
+    clearForestTimer(room, 'finishedTimer')
+    clearMazeTimer(room, 'waitingTimer')
+    clearMazeTimer(room, 'emptyTimer')
+    clearMazeTimer(room, 'finishedTimer')
     room.seed = randomInt(1, 0x7fffffff)
     room.phase = 'running'
     room.countdownEndsAt = null
@@ -235,7 +598,19 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       const scores = room.gameState?.scores ?? [0, 0]
       room.gameState = { board: Array(9).fill(0), turn: (room.round - 1) % 2, scores, winner: null }
     } else if (room.game === 'ball-rush') {
-      room.gameState = { players: [null, null] }
+      room.gameState = {
+        players: [0, 1].map(() => ({
+          x: 0,
+          y: 0,
+          lane: 1,
+          score: 0,
+          coins: 0,
+          hits: 0,
+          alive: true,
+        })),
+        status: 'playing',
+        winner: null,
+      }
     } else if (room.game === 'football-19') {
       room.gameState = { scores: [0, 0], attempts: [0, 0] }
     } else if (room.game === 'head-football') {
@@ -251,7 +626,21 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       room.gameState = { scores: [0, 0], winner: null }
       room.players.forEach((player) => { player.lastActionAt = 0 })
       startTapTimer(room)
-    } else if (room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel') {
+    } else if (room.game === 'memo-5x5') {
+      room.gameState = createMemoMatch(room.seed)
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'damned-maze') {
+      room.gameState = createDamnedMazeState(room.seed)
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'princess-race') {
+      room.gameState = createPrincessRaceState()
+    } else if (room.game === 'grotte-aux-couteaux') {
+      room.gameState = createKnifeDuelState(room.seed)
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'colonnes-du-canyon') {
+      room.gameState = createCanyonRaceState(room.seed)
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel' || room.game === 'forest-bridge') {
       room.gameState = createAuthoritativeGame(room.game, room.seed)
       startAuthoritativeTimer(room)
     } else {
@@ -274,6 +663,7 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
   function acknowledge(socket, callback, room, player) {
     if (typeof callback === 'function') callback({ ok: true, code: room.code, token: player.token, slot: room.players.indexOf(player) })
     socket.emit('arena:room:joined', { code: room.code, token: player.token })
+    sendDemoBalance(player)
     broadcast(room)
   }
 
@@ -287,13 +677,60 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
   }
 
   io.on('connection', (socket) => {
+    socket.on('arena:sportsbook:catalog:request', () => {
+      socket.emit('arena:sportsbook:catalog', demoSportsbook.catalog())
+    })
+
+    socket.on('arena:coupon:history:request', (payload) => {
+      const walletId = typeof payload?.walletId === 'string' && /^[a-z0-9-]{8,64}$/i.test(payload.walletId)
+        ? payload.walletId
+        : null
+      if (!walletId) return
+      socket.emit('arena:coupon:history', { tickets: demoSportsbook.getTickets(walletId) })
+      socket.emit('arena:demo-wallet', { balance: getDemoBalance(walletId) })
+    })
+
+    socket.on('arena:coupon:place', (payload, callback) => {
+      const result = demoSportsbook.placeCoupon({
+        walletId: payload?.walletId,
+        selections: payload?.selections,
+        stake: payload?.stake,
+        idempotencyKey: payload?.idempotencyKey,
+      })
+      if (!result.ok) return callback?.(result)
+      socket.emit('arena:demo-wallet', { balance: result.balance })
+      socket.emit('arena:coupon:history', { tickets: demoSportsbook.getTickets(payload.walletId) })
+      callback?.(result)
+    })
+
     socket.on('arena:room:create', (payload, callback) => {
       if (!GAME_IDS.has(payload?.game)) return callback?.({ ok: false, error: 'Jeu en ligne inconnu.' })
       if (lookup(socket)) return callback?.({ ok: false, error: 'Vous êtes déjà dans une salle.' })
       if (rooms.size >= 300) return callback?.({ ok: false, error: 'Les salles sont temporairement complètes.' })
-      const player = createPlayer(socket, 0, payload?.name)
-      const room = makeRoom(payload.game, [player])
+      const stake = payload?.stake ?? 0
+      if (!Number.isSafeInteger(stake) || stake < 0 || stake > 1_000_000) {
+        return callback?.({ ok: false, error: 'La mise de démonstration est invalide.' })
+      }
+      if (payload?.isPublic === true && stake < 1) {
+        return callback?.({ ok: false, error: 'Un salon public doit avoir une mise de démonstration positive.' })
+      }
+      const player = createPlayer(socket, 0, payload?.name, payload?.walletId)
+      if (!reserveDemoStake(player, stake)) {
+        return callback?.({ ok: false, error: 'Solde de démonstration insuffisant pour cette mise.' })
+      }
+      const room = makeRoom(payload.game, [player], { isPublic: payload?.isPublic === true, stake })
       acknowledge(socket, callback, room, player)
+    })
+
+    socket.on('arena:public-rooms:request', () => {
+      socket.emit('arena:public-rooms', publicRoomList())
+    })
+
+    socket.on('arena:demo-wallet:request', (payload) => {
+      const walletId = typeof payload?.walletId === 'string' && /^[a-z0-9-]{8,64}$/i.test(payload.walletId)
+        ? payload.walletId
+        : null
+      if (walletId) socket.emit('arena:demo-wallet', { balance: getDemoBalance(walletId) })
     })
 
     socket.on('arena:room:join', (payload, callback) => {
@@ -305,13 +742,25 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       if (payload?.game !== undefined && payload.game !== room.game) {
         return callback?.({ ok: false, error: 'Cette salle est réservée à un autre jeu.' })
       }
+      if ((payload?.stake ?? 0) !== room.stake) {
+        return callback?.({ ok: false, error: 'La mise doit être identique à celle affichée dans le salon.' })
+      }
       if (room.players.length >= 2) return callback?.({ ok: false, error: 'Cette salle est déjà complète.' })
       if (lookup(socket)) return callback?.({ ok: false, error: 'Vous êtes déjà dans une salle.' })
-      const player = createPlayer(socket, 1, payload?.name)
+      const player = createPlayer(socket, 1, payload?.name, payload?.walletId)
+      if (!reserveDemoStake(player, room.stake)) {
+        return callback?.({ ok: false, error: 'Solde de démonstration insuffisant pour cette mise.' })
+      }
       room.players.push(player)
+      clearForestTimer(room, 'waitingTimer')
+      clearForestTimer(room, 'emptyTimer')
+      clearMazeTimer(room, 'waitingTimer')
+      clearMazeTimer(room, 'emptyTimer')
+      room.escrowed[player.slot] = room.stake
       player.roomCode = code
       socketPlayers.set(socket.id, { code, token: player.token })
       socket.join(code)
+      broadcastPublicRooms()
       acknowledge(socket, callback, room, player)
     })
 
@@ -320,12 +769,16 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       const token = typeof payload?.token === 'string' ? payload.token : ''
       const room = rooms.get(code)
       const player = room?.players.find((item) => item.token === token)
-      if (!room || !player || player.connected || room.phase === 'finished') {
-        return callback?.({ ok: false, error: 'La reconnexion à cette salle a expiré.' })
+      if (!room || !player || player.connected) {
+        return callback?.({ ok: false, error: 'Cette salle ou ce joueur est introuvable.' })
       }
-      if (room.disconnectTimer) clearTimeout(room.disconnectTimer)
-      room.disconnectTimer = null
       player.connected = true
+      clearForestTimer(room, 'disconnectTimer')
+      clearForestTimer(room, 'emptyTimer')
+      clearMazeTimer(room, 'disconnectTimer')
+      clearMazeTimer(room, 'emptyTimer')
+      player.disconnectedAt = null
+      player.mazeSeed = null
       player.socketId = socket.id
       socketPlayers.set(socket.id, { code, token })
       socket.join(code)
@@ -335,6 +788,7 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
           if (item.lastActionAt) item.lastActionAt += pauseDuration
         })
         room.pausedAt = null
+        if (isForestRace(room) && room.players.length === 1) scheduleForestWaitingExpiry(room)
         if (room.pausedFrom === 'countdown') {
           room.players.forEach((item) => { item.ready = false })
           room.countdownEndsAt = null
@@ -344,6 +798,9 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
         }
         room.pausedFrom = null
       }
+      const disconnected = room.players.find((item) => !item.connected)
+      if (disconnected && isForestRace(room)) scheduleForestDisconnectExpiry(room, disconnected)
+      if (disconnected && room.game === 'damned-maze') scheduleMazeDisconnectExpiry(room, disconnected)
       acknowledge(socket, callback, room, player)
     })
 
@@ -365,6 +822,7 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       }
       broadcast(entry.room)
       startCountdown(entry.room)
+      broadcastPublicRooms()
       callback?.({ ok: true })
     })
 
@@ -379,6 +837,7 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       }
       room.gameState.selections[player.slot] = { clubIndex, playerIndex }
       broadcast(room)
+      broadcastPublicRooms()
       callback?.({ ok: true })
     })
 
@@ -438,6 +897,9 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
         player.input = input
         callback?.({ ok: true })
         return
+      } else if (room.game === 'memo-5x5' && payload?.type === 'memory-flip') {
+        const result = flipMemoCard(room.gameState, player.slot, payload.cardId)
+        if (!result.ok) return callback?.(result)
       } else if (room.game === 'tap-tape-arena' && payload?.type === 'tap') {
         const now = Date.now()
         if (now - player.lastActionAt < 65) {
@@ -467,35 +929,42 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       const state = boundedObject(payload?.state, 24_000)
       if (!room || room.phase !== 'running' || room.game === 'tic-tac-toe'
         || room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel'
-        || room.game === 'head-football' || !state) {
+        || room.game === 'forest-bridge' || room.game === 'princess-race' || room.game === 'damned-maze' || room.game === 'head-football' || !state) {
         return callback?.({ ok: false, error: 'État de partie non autorisé ou invalide.' })
       }
       if (room.game === 'ball-rush') {
-        const { x, y, lane, score, coins, alive } = state
+        const { x, y, lane, score, coins, hits, alive } = state
         if (!Number.isFinite(x) || x < -3.2 || x > 3.2
           || !Number.isFinite(y) || y < 0 || y > 12
           || !Number.isInteger(lane) || lane < 0 || lane > 2
           || !Number.isFinite(score) || score < 0 || score > 10_000_000
           || !Number.isFinite(coins) || coins < 0 || coins > 1_000_000
-          || typeof alive !== 'boolean') {
+          || !Number.isInteger(hits) || hits < 0 || hits > 20
+          || typeof alive !== 'boolean' || alive !== (hits < 20)) {
           return callback?.({ ok: false, error: 'État de course invalide.' })
         }
         const players = room.gameState?.players ?? [null, null]
         const previous = players[player.slot]
         const now = Date.now()
-        const elapsedMs = previous ? now - previous.updatedAt : Number.POSITIVE_INFINITY
+        const elapsedMs = previous?.updatedAt ? now - previous.updatedAt : Number.POSITIVE_INFINITY
         const maxPlausibleScoreIncrease = Math.max(8, elapsedMs * 0.11 + 2)
         if (previous && (elapsedMs < 35
           || score < previous.score
           || score - previous.score > maxPlausibleScoreIncrease
-          || !previous.alive && (alive || score !== previous.score))) {
+          || hits < previous.hits
+          || hits - previous.hits > 1
+          || !previous.alive && (alive || score !== previous.score || hits !== previous.hits))) {
           return callback?.({ ok: false, error: 'Mise à jour de course trop rapide ou incohérente.' })
         }
-        players[player.slot] = { x, y, lane, score, coins, alive, updatedAt: now }
-        room.gameState = { players }
-        if (players.every((entry) => entry && !entry.alive)) {
+        players[player.slot] = { x, y, lane, score, coins, hits, alive, updatedAt: now }
+        room.gameState.players = players
+        if (hits === 20) {
+          room.gameState.status = 'finished'
+          room.gameState.winner = 1 - player.slot
+          room.winnerSlot = 1 - player.slot
           room.phase = 'finished'
           room.players.forEach((entry) => { entry.ready = false })
+          stopGameTimer(room)
         }
       } else {
         if (player.slot !== 0) {
@@ -510,7 +979,7 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
     socket.on('arena:room:finish', (_payload, callback) => {
       const entry = lookup(socket)
       if (!entry || entry.room.phase !== 'running' || entry.player.slot !== 0
-        || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football'].includes(entry.room.game)) {
+      || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon'].includes(entry.room.game)) {
         return callback?.({ ok: false, error: 'Cette manche ne peut pas être terminée par ce joueur.' })
       }
       entry.room.phase = 'finished'
@@ -533,6 +1002,49 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
         callback?.({ ok: true })
         return
       }
+      if (room.game === 'forest-bridge') {
+        if (!applyAuthoritativeInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Le saut est invalide ou ce n’est pas votre tour.' })
+        }
+        if (room.gameState.winner !== null) {
+          finishForestRoom(room, room.gameState.winner)
+          callback?.({ ok: true })
+          return
+        }
+        broadcast(room)
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'princess-race') {
+        if (!applyPrincessRaceAction(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Dé invalide, dé rouge épuisé ou ce n’est pas votre tour.' })
+        }
+        if (room.gameState.winner !== null) finishForestRoom(room, room.gameState.winner)
+        else broadcast(room)
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'damned-maze') {
+        if (!applyDamnedMazeInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Le déplacement est invalide ou la partie n’est plus active.' })
+        }
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'grotte-aux-couteaux') {
+        if (!applyKnifeDuelInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Déplacement invalide ou partie terminée.' })
+        }
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'colonnes-du-canyon') {
+        if (!applyCanyonRaceInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Commande invalide ou partie terminée.' })
+        }
+        callback?.({ ok: true })
+        return
+      }
       const recipient = room.players.find((item) => item.slot === 0)
       if (recipient?.socketId) {
         io.to(recipient.socketId).emit('arena:remote-input', { slot: player.slot, input })
@@ -545,6 +1057,23 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       if (!entry || entry.room.phase !== 'finished') return callback?.({ ok: false, error: 'La manche en cours n’est pas terminée.' })
       entry.player.ready = true
       if (entry.room.players.every((player) => player.connected && player.ready)) {
+        clearForestTimer(entry.room, 'finishedTimer')
+        if (entry.room.stake > 0) {
+          for (const player of entry.room.players) {
+            if (getDemoBalance(player.walletId) < entry.room.stake) {
+              entry.room.players.forEach((item) => { item.ready = false })
+              broadcast(entry.room)
+              return callback?.({ ok: false, error: 'Solde démo insuffisant pour rejouer cette mise.' })
+            }
+          }
+          entry.room.players.forEach((player, slot) => {
+            reserveDemoStake(player, entry.room.stake)
+            entry.room.escrowed[slot] = entry.room.stake
+          })
+        }
+        entry.room.settled = false
+        entry.room.payout = 0
+        entry.room.winnerSlot = null
         entry.room.phase = 'waiting'
         if (entry.room.game === 'tic-tac-toe') {
           entry.room.gameState = { ...entry.room.gameState, board: Array(9).fill(0), winner: null }
@@ -560,6 +1089,9 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
           })
         } else if (entry.room.game === 'tap-tape-arena') {
           entry.room.gameState = { scores: [0, 0], winner: null }
+        } else if (entry.room.game === 'damned-maze' || entry.room.game === 'princess-race'
+          || entry.room.game === 'grotte-aux-couteaux' || entry.room.game === 'colonnes-du-canyon') {
+          entry.room.gameState = null
         }
       }
       broadcast(entry.room)
@@ -571,6 +1103,7 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       const entry = lookup(socket)
       if (!entry) return callback?.({ ok: true })
       removeRoom(entry.room)
+      broadcastPublicRooms()
       callback?.({ ok: true })
     })
 
@@ -580,8 +1113,19 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
       const { room, player } = entry
       player.connected = false
       player.socketId = null
+      player.disconnectedAt = Date.now()
       player.input = { left: false, right: false, jump: false, kick: false, power: false }
+      if (room.game === 'grotte-aux-couteaux' && room.gameState?.players[player.slot]) {
+        room.gameState.players[player.slot].input = { direction: 0, targetZ: null }
+      }
+      if (room.game === 'colonnes-du-canyon' && room.gameState?.players[player.slot]) {
+        room.gameState.players[player.slot].input = { left: false, right: false, jump: false }
+        room.gameState.players[player.slot].jumpHeld = false
+        room.gameState.players[player.slot].jumpBuffer = 0
+      }
       socketPlayers.delete(socket.id)
+      if (isForestRace(room)) scheduleForestDisconnectExpiry(room, player)
+      if (room.game === 'damned-maze') scheduleMazeDisconnectExpiry(room, player)
       if (room.phase === 'running' || room.phase === 'countdown') {
         room.pausedFrom = room.phase
         if (room.countdownTimer) clearTimeout(room.countdownTimer)
@@ -591,12 +1135,9 @@ export function attachArenaManager(io, { countdownMs = 3000, roomGraceMs = 25_00
         room.pausedAt = Date.now()
       }
       broadcast(room)
-      room.disconnectTimer = setTimeout(() => {
-        if (!player.connected) removeRoom(room)
-      }, roomGraceMs)
-      room.disconnectTimer.unref?.()
+      broadcastPublicRooms()
     })
   })
 
-  return { rooms }
+  return { rooms, getDemoBalance, reserveDemoStake, addDemoCredits, sendDemoBalance }
 }

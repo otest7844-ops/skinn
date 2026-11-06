@@ -24,7 +24,7 @@ export function createHeadFootballMatch(selections) {
   return {
     status: 'count',
     phaseElapsed: 0,
-    remaining: 30,
+    remaining: 0,
     scores: [0, 0],
     winner: null,
     players: [player(330, 1, selections[0]), player(936, -1, selections[1])],
@@ -174,6 +174,13 @@ export function tickHeadFootballMatch(state, dt, inputs) {
     state.status = 'play'
     state.phaseElapsed = 0
   } else if (state.status === 'goal' && state.phaseElapsed >= 1.8) {
+    if (state.scores.some((score) => score >= 10)) {
+      state.status = 'finished'
+      state.winner = state.scores[0] === state.scores[1]
+        ? null
+        : state.scores[0] > state.scores[1] ? 0 : 1
+      return state
+    }
     resetPositions(state)
     state.status = 'play'
     state.phaseElapsed = 0
@@ -188,15 +195,6 @@ export function tickHeadFootballMatch(state, dt, inputs) {
     collidePlayer(state, state.players[1])
   }
 
-  if (live) {
-    state.remaining = Math.max(0, state.remaining - elapsed)
-    if (state.remaining === 0) {
-      state.status = 'finished'
-      state.winner = state.scores[0] === state.scores[1]
-        ? null
-        : state.scores[0] > state.scores[1] ? 0 : 1
-    }
-  }
   return state
 }
 
