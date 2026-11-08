@@ -10,13 +10,16 @@ export class FlightModel {
     this.y = 0
     this.vy = 0
     this.score = 0
+    this.coins = 0
     this.alive = true
     this.distance = 0
+    this.elapsed = 0
+    this.nextCoinAt = 5
     this.passedGates = new Set()
     this.nextGateId = 6
     this.gates = Array.from({ length: 6 }, (_, index) => ({
       id: index,
-      x: x + 5.9 + index * 5.1,
+      x: x + 5.9 + index * 8.5,
       center: index === 0 ? 0.1 : this.nextCenter(),
       passed: false,
     }))
@@ -38,12 +41,20 @@ export class FlightModel {
     this.vy = Math.max(-8.5, this.vy - 14.5 * dt)
     this.y += this.vy * dt
     this.distance += speed * dt
+    this.elapsed += dt
+    while (this.elapsed >= this.nextCoinAt) {
+      if (Math.abs(this.y) < 1.1) this.coins += 1
+      this.nextCoinAt += 5
+    }
 
     let hit = this.y - 0.27 < -this.limit || this.y + 0.27 > this.limit
     let passed = 0
 
-    for (const gate of gates) {
-      if (!course) gate.x -= speed * dt
+    if (!course) {
+      for (const gate of gates) gate.x -= speed * dt
+    }
+
+    for (const gate of this.elapsed >= 10 ? gates : []) {
       if (Math.abs(gate.x - this.x) < 0.83) {
         const dx = Math.max(Math.abs(gate.x - this.x) - 0.56, 0)
         const dy = Math.max(0, 1.82 - Math.abs(this.y - gate.center))
@@ -58,7 +69,7 @@ export class FlightModel {
       }
     }
 
-    if (!hit) {
+    if (!hit && this.elapsed >= 10) {
       for (const gate of gates) {
         const alreadyPassed = course ? this.passedGates.has(gate.id) : gate.passed
         if (!alreadyPassed && gate.x + 0.56 < this.x - 0.27) {
@@ -73,7 +84,7 @@ export class FlightModel {
     if (!course) {
       for (const gate of gates) {
         if (gate.x < this.x - 7) {
-          gate.x = Math.max(...gates.map((item) => item.x)) + 5.1
+          gate.x = Math.max(...gates.map((item) => item.x)) + 8.5
           gate.center = this.nextCenter()
           gate.passed = false
           gate.id = this.nextGateId

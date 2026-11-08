@@ -662,7 +662,7 @@ export default function SoccerArena({ onClose, room = null, onAction }: SoccerAr
     }
   }, [])
 
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
     if (phaseRef.current !== 'aiming') return
     e.currentTarget.setPointerCapture(e.pointerId)
     chargeStartRef.current = Date.now()
@@ -1004,6 +1004,18 @@ export default function SoccerArena({ onClose, room = null, onAction }: SoccerAr
               <span className="text-xs font-bold text-white">Glisse pour viser · Appuie et tiens pour tirer</span>
             </div>
           </div>
+        )}
+        {(phase === 'aiming' || phase === 'charging') && (
+          <button
+            type="button"
+            className="absolute z-10 bottom-3 left-1/2 -translate-x-1/2 min-h-12 rounded-full border border-amber-200 bg-amber-500 px-7 font-black text-white shadow-lg active:scale-95 touch-none"
+            onPointerDown={onPointerDown}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            aria-label="Maintenir pour charger puis relâcher pour tirer"
+          >
+            {phase === 'charging' ? 'RELÂCHER POUR TIRER' : 'MAINTENIR POUR TIRER'}
+          </button>
         )}
 
         {/* Power bar (charging) */}

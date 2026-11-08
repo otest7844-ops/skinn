@@ -3,6 +3,7 @@ import { once } from 'node:events'
 import test from 'node:test'
 import { io as createSocket } from 'socket.io-client'
 import { createMosswingServer } from './server.mjs'
+import { findWordSearchPath } from '../shared/word-search.mjs'
 
 function emitAck(socket, event, payload = {}) {
   return new Promise((resolve) => socket.emit(event, payload, resolve))
@@ -24,7 +25,7 @@ function waitFor(socket, event, predicate = () => true, timeout = 3000) {
   })
 }
 
-async function setup(context, game, countdownMs = 20, stake = 0) {
+async function setup(context, game, countdownMs = 20, stake = 0, roomOptions = {}) {
   const server = createMosswingServer({ port: 0, countdownMs, roomGraceMs: 30 })
   const address = await server.start()
   const sockets = []
@@ -40,7 +41,7 @@ async function setup(context, game, countdownMs = 20, stake = 0) {
   }
   const first = await connect()
   const second = await connect()
-  const created = await emitAck(first, 'arena:room:create', { game, name: 'Pilote A', stake })
+  const created = await emitAck(first, 'arena:room:create', { game, name: 'Pilote A', stake, ...roomOptions })
   assert.equal(created.ok, true)
   const joined = await emitAck(second, 'arena:room:join', { game, code: created.code, name: 'Pilote B', stake })
   assert.equal(joined.ok, true)
@@ -64,8 +65,8 @@ test('creates and joins rooms for every supported arena game, including public C
 
   const games = [
     'tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush',
-    'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'forest-bridge', 'damned-maze', 'princess-race',
-    'grotte-aux-couteaux', 'colonnes-du-canyon',
+    'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'forest-bridge', 'damned-maze', 'princess-race',
+    'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs',
   ]
   for (const game of games) {
     const host = await connect()
@@ -90,6 +91,92 @@ test('creates and joins rooms for every supported arena game, including public C
     assert.equal(joined.ok, true, `${game} room join`)
     assert.equal((await waitingForGuest).yourSlot, 1)
   }
+})
+
+test('runs Chasse aux mots in a shared two-player room and scores validated selections', async (context) => {
+  const { server, first, second, created } = await setup(context, 'word-search', 15, 0, { category: 'Animaux' })
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const game = server.arenaRooms.get(created.code).gameState.wordSearch
+  assert.equal(game.category, 'Animaux')
+  let selected = null
+  let expectedPoints = 0
+  for (let start = 0; start < game.grid.length && !selected; start += 1) {
+    for (let end = 0; end < game.grid.length; end += 1) {
+      const path = findWordSearchPath(game, start, end)
+      if (path) {
+        selected = { start, end }
+        expectedPoints = path.points
+        break
+      }
+    }
+  }
+  assert.ok(selected)
+  const updatedStates = Promise.all([
+    waitFor(first, 'arena:state', (state) =>
+      state.phase === 'running' && state.gameState.wordSearch.found.length === 1,
+    ),
+    waitFor(second, 'arena:state', (state) =>
+    state.phase === 'running' && state.gameState.wordSearch.found.length === 1,
+    ),
+  ])
+  assert.equal((await emitAck(first, 'arena:game:action', {
+    type: 'word-search:select', ...selected,
+  })).ok, true)
+  const [hostState, guestState] = await updatedStates
+  assert.equal(guestState.gameState.wordSearch.scores[0], expectedPoints)
+  assert.equal(guestState.gameState.wordSearch.foundCounts[0], 1)
+  assert.equal(guestState.gameState.wordSearch.found[0].slot, 0)
+  assert.deepEqual(hostState.gameState.wordSearch, guestState.gameState.wordSearch)
+  assert.equal((await emitAck(first, 'arena:game:action', {
+    type: 'word-search:select', ...selected,
+  })).ok, false)
+  assert.equal(game.scores[0], expectedPoints)
+
+  for (const placement of game.placements) {
+    if (game.found.some((entry) => entry.word === placement.word)) continue
+    const result = await emitAck(second, 'arena:game:action', {
+      type: 'word-search:select',
+      start: placement.cells[0],
+      end: placement.cells.at(-1),
+    })
+    assert.equal(result.ok, true)
+  }
+  assert.equal(server.arenaRooms.get(created.code).phase, 'finished')
+  assert.equal(game.status, 'finished')
+  assert.equal(game.found.length, game.words.length)
+})
+
+test('runs Dictée Éclair in a shared room and awards a round only for an exact copy', async (context) => {
+  const { server, first, second, created } = await setup(context, 'dictation-duel', 15)
+  const started = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await started
+  const game = server.arenaRooms.get(created.code).gameState.dictation
+  const updates = Promise.all([
+    waitFor(first, 'arena:state', (state) =>
+      state.phase === 'running' && state.gameState.scores[0] === 1,
+    ),
+    waitFor(second, 'arena:state', (state) =>
+      state.phase === 'running' && state.gameState.scores[0] === 1,
+    ),
+  ])
+  assert.equal((await emitAck(first, 'arena:game:action', {
+    type: 'dictation:submit', answer: game.sentence,
+  })).ok, true)
+  const [hostState, guestState] = await updates
+  assert.equal(hostState.gameState.dictation.phase, 'intermission')
+  assert.equal(hostState.gameState.dictation.lastResult.correct, true)
+  assert.deepEqual(hostState.gameState, guestState.gameState)
+  assert.equal((await emitAck(second, 'arena:game:action', {
+    type: 'dictation:submit', answer: game.sentence,
+  })).ok, false)
 })
 
 test('runs Grotte aux Couteaux from validated movement input and broadcasts shared positions', async (context) => {
@@ -138,6 +225,85 @@ test('runs Colonnes du Canyon with server-side movement and a shared course', as
   const finished = await waitFor(second, 'arena:state', (state) => state.phase === 'finished')
   assert.equal(finished.winnerSlot, 1)
   assert.equal(finished.payout, 200)
+})
+
+test('runs Arène Hélice with validated movement and a shared server simulation', async (context) => {
+  const { first, second } = await setup(context, 'arena-helice', 15)
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { x: 2, z: 0, jump: true },
+  })).ok, false)
+  const hostUpdate = waitFor(first, 'arena:state', (state) =>
+    state.phase === 'running' && state.gameState.players[0].input.x === 0.75,
+  )
+  const guestUpdate = waitFor(second, 'arena:state', (state) =>
+    state.phase === 'running' && state.gameState.players[0].input.x === 0.75,
+  )
+  const guestInput = waitFor(second, 'arena:remote-input', (message) => message.slot === 0)
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { x: 0.75, z: -0.25, jump: true },
+  })).ok, true)
+  const [hostState, guestState] = await Promise.all([hostUpdate, guestUpdate])
+  assert.deepEqual((await guestInput).input, { x: 0.75, z: -0.25, jump: true })
+  assert.deepEqual(hostState.gameState.players, guestState.gameState.players)
+  assert.equal(hostState.gameState.players[0].input.jump, true)
+  assert.equal(hostState.gameState.target, 5)
+  const hostInput = waitFor(first, 'arena:remote-input', (message) => message.slot === 1)
+  assert.equal((await emitAck(second, 'arena:input', {
+    input: { x: -0.5, z: 0, jump: false },
+  })).ok, true)
+  assert.deepEqual((await hostInput).input, { x: -0.5, z: 0, jump: false })
+  const guestJump = waitFor(first, 'arena:remote-input', (message) =>
+    message.slot === 1 && message.input.jump === true,
+  )
+  assert.equal((await emitAck(second, 'arena:input', {
+    input: { x: -0.5, z: 0, jump: true },
+  })).ok, true)
+  assert.equal((await guestJump).input.jump, true)
+})
+
+test('runs Duel de Troncs with validated lane and jump actions in shared rooms', async (context) => {
+  const { first, second } = await setup(context, 'duel-de-troncs', 15)
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { action: 'admin' },
+  })).ok, false)
+  const hostUpdate = waitFor(first, 'arena:state', (state) =>
+    state.phase === 'running' && state.gameState.players[0].lane === 1,
+  )
+  const guestUpdate = waitFor(second, 'arena:state', (state) =>
+    state.phase === 'running' && state.gameState.players[0].lane === 1,
+  )
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { action: 'right' },
+  })).ok, true)
+  const [hostState, guestState] = await Promise.all([hostUpdate, guestUpdate])
+  assert.deepEqual(hostState.gameState.players, guestState.gameState.players)
+  assert.equal(hostState.gameState.scores.length, 2)
+  assert.ok(hostState.gameState.obstacles.length > 0)
+  const firstPlayerJump = waitFor(first, 'arena:state', (state) =>
+    state.phase === 'running' && state.gameState.players[0].jumpTime > 0,
+  )
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { action: 'jump' },
+  })).ok, true)
+  await firstPlayerJump
+  const secondPlayerJump = waitFor(second, 'arena:state', (state) =>
+    state.phase === 'running' && state.gameState.players[1].jumpTime > 0,
+  )
+  assert.equal((await emitAck(second, 'arena:input', {
+    input: { action: 'jump' },
+  })).ok, true)
+  await secondPlayerJump
+  assert.equal((await emitAck(second, 'arena:state', { state: {} })).ok, false)
 })
 
 test('runs Princess Race with server dice, pays the winner in demo credits, and supports a rematch', async (context) => {
@@ -863,87 +1029,4 @@ test('runs Canon Duel inputs from both assigned player slots on shared server st
   assert.equal((await emitAck(first, 'arena:state', {
     state: { status: 'finished', winner: 0 },
   })).ok, false)
-})
-
-test('places demo sports coupons with server odds, atomic wallet debits, and idempotent retries', async (context) => {
-  const gameServer = createMosswingServer({ port: 0 })
-  const address = await gameServer.start()
-  const sockets = []
-  context.after(async () => {
-    sockets.forEach((socket) => socket.disconnect())
-    await gameServer.stop()
-  })
-
-  const socket = createSocket(`http://127.0.0.1:${address.port}`, {
-    transports: ['websocket'],
-    reconnection: false,
-  })
-  sockets.push(socket)
-  await once(socket, 'connect')
-
-  const catalogPromise = waitFor(socket, 'arena:sportsbook:catalog')
-  socket.emit('arena:sportsbook:catalog:request')
-  const catalog = await catalogPromise
-  assert.equal(catalog.length, 5)
-  assert.equal(catalog.find((match) => match.id === 'bundesliga').homeOdds, 1.82)
-
-  const walletId = 'sportsbook-wallet-01'
-  const initialBalancePromise = waitFor(socket, 'arena:demo-wallet')
-  socket.emit('arena:demo-wallet:request', { walletId })
-  assert.equal((await initialBalancePromise).balance, 10_000)
-
-  const payload = {
-    walletId,
-    stake: 500,
-    idempotencyKey: 'coupon-test-retry-001',
-    selections: [{ matchId: 'bundesliga', option: 'V1' }],
-  }
-  const firstTicket = await emitAck(socket, 'arena:coupon:place', payload)
-  assert.equal(firstTicket.ok, true)
-  assert.equal(firstTicket.ticket.potential, 910)
-  assert.equal(firstTicket.ticket.selections[0].odds, 1.82)
-  assert.equal(firstTicket.balance, 9_500)
-
-  const retriedTicket = await emitAck(socket, 'arena:coupon:place', payload)
-  assert.equal(retriedTicket.ok, true)
-  assert.equal(retriedTicket.duplicate, true)
-  assert.equal(retriedTicket.ticket.id, firstTicket.ticket.id)
-  assert.equal(retriedTicket.balance, 9_500)
-
-  const forgedOdds = await emitAck(socket, 'arena:coupon:place', {
-    ...payload,
-    idempotencyKey: 'coupon-forged-odds-01',
-    selections: [{ matchId: 'bundesliga', option: 'V1', odds: 99 }],
-  })
-  assert.equal(forgedOdds.ok, false)
-
-  const insufficient = await emitAck(socket, 'arena:coupon:place', {
-    ...payload,
-    idempotencyKey: 'coupon-insufficient-01',
-    stake: 10_000,
-  })
-  assert.equal(insufficient.ok, false)
-  assert.match(insufficient.error, /insuffisant/)
-
-  const historyPromise = waitFor(socket, 'arena:coupon:history')
-  socket.emit('arena:coupon:history:request', { walletId })
-  assert.equal((await historyPromise).tickets.length, 1)
-
-  const concurrentWalletId = 'sportsbook-concurrent-01'
-  const concurrentResults = await Promise.all([
-    emitAck(socket, 'arena:coupon:place', {
-      walletId: concurrentWalletId,
-      stake: 7_000,
-      idempotencyKey: 'coupon-concurrent-a-01',
-      selections: [{ matchId: 'laliga', option: 'X' }],
-    }),
-    emitAck(socket, 'arena:coupon:place', {
-      walletId: concurrentWalletId,
-      stake: 7_000,
-      idempotencyKey: 'coupon-concurrent-b-01',
-      selections: [{ matchId: 'laliga', option: 'X' }],
-    }),
-  ])
-  assert.equal(concurrentResults.filter((result) => result.ok).length, 1)
-  assert.equal(concurrentResults.filter((result) => !result.ok).length, 1)
 })

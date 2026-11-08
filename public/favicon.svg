@@ -1,12 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Chicago">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Chicagago">
   <defs>
-    <linearGradient id="chicago" x1="0%" x2="0%" y1="0%" y2="100%">
-      <stop offset="0%" stop-color="#fff" />
-      <stop offset="60%" stop-color="#fff" />
-      <stop offset="100%" stop-color="#ed00a8" />
+    <linearGradient id="chrome" x1="0" x2="0" y1="0" y2="1">
+      <stop stop-color="#f3f3f5" />
+      <stop offset=".25" stop-color="#55555e" />
+      <stop offset=".48" stop-color="#d7d7dc" />
+      <stop offset=".72" stop-color="#292930" />
+      <stop offset="1" stop-color="#aaaab2" />
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="18" fill="#09060c" />
-  <text x="32" y="39" text-anchor="middle" fill="url(#chicago)" stroke="#a000bd" stroke-width="1.5" paint-order="stroke" font-family="Impact, 'Arial Black', sans-serif" font-size="35" font-weight="900">C</text>
-  <path d="M13 38c4 5-3 8-1 13 3-2 4-5 6-7 1 4-1 7-3 10 4-2 5-6 7-10 2 4 1 7 3 9 3-4 2-8 5-12 2 4 1 8 4 10 2-4 2-7 4-11 2 5 2 8 5 10 2-4 2-7 4-11 2 5 2 8 4 10 4-4 3-8 5-12v17H13Z" fill="#ed00a8" />
+  <rect width="64" height="64" rx="16" fill="#030304" />
+  <text x="32" y="46" text-anchor="middle" fill="url(#chrome)" stroke="#101015" stroke-width="2" paint-order="stroke" font-family="Impact, 'Arial Black', sans-serif" font-size="46" font-weight="900">C</text>
+  <path d="M22 40h5v12c0 4-5 4-5 0Zm14 0h5v17c0 4-5 4-5 0Z" fill="url(#chrome)" />
 </svg>

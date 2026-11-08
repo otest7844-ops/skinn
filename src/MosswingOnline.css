@@ -572,6 +572,35 @@
   font-size: 0.82rem;
 }
 
+.mosswing-controls-summary {
+  margin: 0.75rem 0 0;
+  color: #d7f5ff;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.mosswing-flap-button {
+  position: absolute;
+  z-index: 9;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  min-width: 7rem;
+  min-height: 3.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f8cf66, #cb7134);
+  box-shadow: 0 5px 0 #74401f, 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font: 900 0.85rem Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.08em;
+  touch-action: manipulation;
+}
+
+.mosswing-flap-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #74401f, 0 5px 16px rgba(0, 0, 0, 0.3);
+}
+
 .mosswing-result-shade {
   position: absolute;
   z-index: 10;

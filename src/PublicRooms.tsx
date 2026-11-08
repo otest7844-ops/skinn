@@ -3,6 +3,7 @@ import { io } from 'socket.io-client'
 import { Gamepad2, Users } from 'lucide-react'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
+import { getResponsiveImageProps, hideBrokenImage } from './responsive-image'
 
 export type PublicRoom = {
   code: string
@@ -23,12 +24,16 @@ const TITLES: Record<string, string> = {
   'head-football': 'Head Football',
   'tap-tape-arena': 'Tape-Tape Arena',
   'memo-5x5': 'Mémo 5×5',
+  'word-search': 'Chasse aux mots',
+  'dictation-duel': 'Dictée Éclair',
   'mosswing-online': 'Mosswing Online',
   'forest-bridge': 'Pont de la forêt 3D',
   'damned-maze': 'Le Labyrinthe des Damnés',
   'princess-race': 'La Course vers la Princesse',
   'grotte-aux-couteaux': 'Grotte aux Couteaux',
   'colonnes-du-canyon': 'Colonnes du Canyon',
+  'arena-helice': 'Arène Hélice',
+  'duel-de-troncs': 'Duel de Troncs',
 }
 
 const IMAGES: Record<string, string> = {
@@ -41,12 +46,16 @@ const IMAGES: Record<string, string> = {
   'head-football': '/images/football-19.jpg',
   'tap-tape-arena': '/images/tape-tape-arena.jpg',
   'memo-5x5': '/images/memo-5x5.jpg',
+  'word-search': '/images/game-word-search.jpg',
+  'dictation-duel': '/images/dictee-eclair.jpg',
   'mosswing-online': '/images/mosswing-online.jpg',
   'forest-bridge': '/images/forest-bridge.jpg',
   'damned-maze': '/images/damned-maze.jpg',
   'princess-race': '/images/princess-race.jpg',
   'grotte-aux-couteaux': '/images/damned-maze.jpg',
   'colonnes-du-canyon': '/images/forest-bridge.jpg',
+  'arena-helice': '/images/arena-helice.gif',
+  'duel-de-troncs': '/images/duel-de-troncs.jpg',
 }
 
 export default function PublicRooms({
@@ -105,7 +114,16 @@ export default function PublicRooms({
           {rooms.map((room) => (
             <article key={room.code} className="flex items-center gap-3 rounded-2xl border border-pink-400/30 bg-pink-500/10 p-3">
               <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-pink-400/40 bg-pink-500/15">
-                <img src={IMAGES[room.game]} alt="" className="h-full w-full object-cover" />
+                <img
+                  {...getResponsiveImageProps(IMAGES[room.game], '48px', [64, 128, 192])}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  width={48}
+                  height={48}
+                  loading="lazy"
+                  decoding="async"
+                  onError={hideBrokenImage}
+                />
                 <Gamepad2 size={13} className="absolute bottom-1 right-1 rounded bg-pink-500 p-0.5 text-white" />
               </div>
               <div className="min-w-0 flex-1">

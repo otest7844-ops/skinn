@@ -93,12 +93,15 @@ export function createMosswingServer({
         connected: player.connected,
         ready: player.ready,
         score: player.model?.score ?? 0,
+        coins: player.model?.coins ?? 0,
         alive: player.model?.alive ?? true,
         name: player.name,
         x: player.model?.x ?? (slot === 0 ? -1.25 : -0.15),
         y: player.model?.y ?? 0,
         vy: player.model?.vy ?? 0,
         distance: player.model?.distance ?? 0,
+        elapsed: player.model?.elapsed ?? 0,
+        nextCoinAt: player.model?.nextCoinAt ?? 5,
       })),
       gates: room.course?.gates.map(({ id, x, center }) => ({ id, x, center })) ?? [],
       yourSlot: recipient ? room.players.indexOf(recipient) : -1,
@@ -531,7 +534,7 @@ export function createMosswingServer({
         for (const gate of room.course.gates) gate.x -= room.course.speed * STEP_SECONDS
         for (const gate of room.course.gates) {
           if (gate.x < -1.25 - 7) {
-            gate.x = Math.max(...room.course.gates.map((item) => item.x)) + 5.1
+            gate.x = Math.max(...room.course.gates.map((item) => item.x)) + 8.5
             gate.center = (room.course.random() - 0.5) * 2.2
             gate.id = room.course.nextGateId
             room.course.nextGateId += 1

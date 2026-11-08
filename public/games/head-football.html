@@ -101,7 +101,7 @@ function setKey(e,down){if(gameMode==='solo'){const action=km[e.key];if(action){
  playerKeys.forEach((map,slot)=>{const action=map[key];if(action){keyboardInputs[slot][action]=down;handled=true}});
  if(handled)e.preventDefault()}
 addEventListener('keydown',e=>setKey(e,true));addEventListener('keyup',e=>setKey(e,false));
-const inp=()=>{const o={};for(const k of 'lrjks')o[k]=K[k]||KB[k];return o};
+const inp=()=>{const o={};for(const k of 'lrjks')o[k]=K[k]||KB[k]||touchInputs[0][k];return o};
 function gameInput(slot){if(gameMode==='solo')return slot===0?inp():{};const actualSlot=gameMode==='online'?onlineSlot:slot;const keyboard=keyboardInputs[actualSlot],touch=touchInputs[actualSlot];return{l:Boolean(keyboard.l||touch.l),r:Boolean(keyboard.r||touch.r),j:Boolean(keyboard.j||touch.j),k:Boolean(keyboard.k||touch.k),s:Boolean(keyboard.s||touch.s)}}
 function applyOnlineState(room){const match=room&&room.match;if(!match)return;onlineTarget=match;s1=match.scores[0];s2=match.scores[1];tl=match.remaining;const nextScores=s1+':'+s2;if(lastOnlineScores&&nextScores!==lastOnlineScores&&match.status==='goal')conf(s1>s2?1100:166,260,90);lastOnlineScores=nextScores;
  match.players.forEach((player,index)=>{const selected=player.selection;if(!selected)return;const club=CL[selected.clubIndex],name=PL[selected.playerIndex],look=Object.assign(av(selected.playerIndex),{c1:club[2],c2:club[3]});if(index===0){S1.cl=club;S1.n=name;S1.o=look;A.o=look}else{S2.cl=club;S2.n=name;S2.o=look;B.o=look}});

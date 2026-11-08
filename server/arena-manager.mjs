@@ -2,6 +2,13 @@ import { randomBytes, randomInt, randomUUID } from 'node:crypto'
 import { applyAuthoritativeInput, createAuthoritativeGame, tickAuthoritativeGame } from './authoritative-arcade.mjs'
 import { createHeadFootballMatch, sanitizeHeadFootballInput, tickHeadFootballMatch } from './head-football.mjs'
 import { createMemoMatch, flipMemoCard, tickMemoMatch } from './memo-game.mjs'
+import {
+  createWordSearchMatch,
+  submitWordSearchWord,
+  tickWordSearchMatch,
+  WORD_SEARCH_CATEGORIES,
+} from '../shared/word-search.mjs'
+import { createDictationMatch, submitDictationAnswer, tickDictationMatch } from './dictation-game.mjs'
 import { applyDamnedMazeInput, createDamnedMazeState, tickDamnedMaze } from './damned-maze.mjs'
 import { applyPrincessRaceAction, createPrincessRaceState } from './princess-race.mjs'
 import {
@@ -12,9 +19,16 @@ import {
   tickCanyonRace,
   tickKnifeDuel,
 } from './new-arcade-games.mjs'
-import { createDemoSportsbook } from './demo-sportsbook.mjs'
+import {
+  applyHelixArenaInput,
+  applyTrunkDuelInput,
+  createHelixArenaState,
+  createTrunkDuelState,
+  tickHelixArena,
+  tickTrunkDuel,
+} from './supplied-arcade-games.mjs'
 
-const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon'])
+const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs'])
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const TAP_TICK_MS = 50
 const TAP_SNAPSHOT_MS = 100
@@ -42,6 +56,7 @@ function clearForestTimer(room, key) {
 function isForestRace(room) {
   return room.game === 'forest-bridge' || room.game === 'princess-race'
     || room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon'
+    || room.game === 'arena-helice' || room.game === 'duel-de-troncs'
 }
 
 function boundedObject(value, maxLength) {
@@ -117,11 +132,13 @@ export function attachArenaManager(io, {
     room.winnerSlot = winnerSlot
     if (room.gameState) {
       room.gameState.winner = winnerSlot
-      if (room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon') {
+      if (room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon'
+        || room.game === 'arena-helice' || room.game === 'duel-de-troncs') {
         room.gameState.status = 'finished'
         room.gameState.players.forEach((state) => {
           if (state.input?.direction !== undefined) state.input = { direction: 0, targetZ: null }
-          else state.input = { left: false, right: false, jump: false }
+          else if (state.input?.x !== undefined) state.input = { x: 0, z: 0, jump: false }
+          else state.input = null
         })
       }
     }
@@ -272,16 +289,6 @@ export function attachArenaManager(io, {
     return balance
   }
 
-  const demoSportsbook = createDemoSportsbook({
-    getBalance: getDemoBalance,
-    reserveStake: (walletId, stake) => {
-      const balance = getDemoBalance(walletId)
-      if (balance < stake) return false
-      demoWallets.set(walletId, balance - stake)
-      return true
-    },
-  })
-
   function finishedWinner(room) {
     const state = room.gameState
     const winner = room.game === 'head-football' ? state?.match?.winner : state?.winner
@@ -337,6 +344,18 @@ export function attachArenaManager(io, {
     if (room.game === 'forest-bridge' && gameState) {
       gameState = { ...gameState }
       delete gameState.traps
+    } else if (room.game === 'dictation-duel' && gameState) {
+      gameState = {
+        ...gameState,
+        dictation: {
+          ...gameState.dictation,
+          roundRemainingMs: gameState.dictation.phase === 'playing'
+            ? Math.max(0, gameState.dictation.roundDeadline - Date.now())
+            : 0,
+        },
+      }
+      delete gameState.dictation.randomState
+      delete gameState.dictation.usedPhrases
     } else if ((room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon') && gameState) {
       gameState = { ...gameState }
       delete gameState.randomState
@@ -358,6 +377,7 @@ export function attachArenaManager(io, {
     return {
       code: room.code,
       game: room.game,
+      category: room.wordSearchCategory,
       isPublic: room.isPublic,
       stake: room.stake,
       payout: room.payout,
@@ -462,16 +482,27 @@ export function attachArenaManager(io, {
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTickAt) / 1000))
       lastTickAt = now
       if (room.game === 'memo-5x5') tickMemoMatch(room.gameState, now)
+      else if (room.game === 'word-search') tickWordSearchMatch(room.gameState, now)
+      else if (room.game === 'dictation-duel') tickDictationMatch(room.gameState.dictation, now)
       else if (room.game === 'damned-maze') tickDamnedMaze(room.gameState, dt)
       else if (room.game === 'grotte-aux-couteaux') tickKnifeDuel(room.gameState, dt)
       else if (room.game === 'colonnes-du-canyon') tickCanyonRace(room.gameState, dt)
+      else if (room.game === 'arena-helice') tickHelixArena(room.gameState, dt)
+      else if (room.game === 'duel-de-troncs') tickTrunkDuel(room.gameState, dt)
       else tickAuthoritativeGame(room.gameState, dt)
       if ((room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon')
         && room.gameState.status === 'finished') {
         finishForestRoom(room, room.gameState.winner)
         return
       }
-      const finished = room.game === 'ping-pong'
+      if ((room.game === 'arena-helice' || room.game === 'duel-de-troncs')
+        && room.gameState.status === 'finished') {
+        finishForestRoom(room, room.gameState.winner)
+        return
+      }
+      const finished = room.game === 'dictation-duel'
+        ? room.gameState.dictation.status === 'finished'
+        : room.game === 'ping-pong'
         ? room.gameState.state === 'over'
         : room.game === 'forest-bridge' || room.game === 'princess-race'
           ? room.gameState.winner !== null
@@ -482,7 +513,8 @@ export function attachArenaManager(io, {
         stopGameTimer(room)
         if (room.game === 'damned-maze') scheduleMazeFinishedExpiry(room)
       }
-      if (now - room.lastGameBroadcastAt >= 50 || finished) {
+      const broadcastInterval = room.game === 'arena-helice' ? 33 : 50
+      if (now - room.lastGameBroadcastAt >= broadcastInterval || finished) {
         room.lastGameBroadcastAt = now
         broadcast(room)
       }
@@ -507,11 +539,12 @@ export function attachArenaManager(io, {
     io.to(room.code).emit('arena:closed', { reason })
   }
 
-  function makeRoom(game, players, { isPublic = false, stake = 0 } = {}) {
+  function makeRoom(game, players, { isPublic = false, stake = 0, wordSearchCategory = '*' } = {}) {
     const code = makeCode()
     const room = {
       code,
       game,
+      wordSearchCategory,
       isPublic,
       stake,
       escrowed: [stake, 0],
@@ -629,6 +662,15 @@ export function attachArenaManager(io, {
     } else if (room.game === 'memo-5x5') {
       room.gameState = createMemoMatch(room.seed)
       startAuthoritativeTimer(room)
+    } else if (room.game === 'word-search') {
+      room.gameState = {
+        wordSearch: createWordSearchMatch(room.seed, Date.now(), room.wordSearchCategory),
+        scores: [0, 0],
+      }
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'dictation-duel') {
+      room.gameState = { dictation: createDictationMatch(room.seed), scores: [0, 0] }
+      startAuthoritativeTimer(room)
     } else if (room.game === 'damned-maze') {
       room.gameState = createDamnedMazeState(room.seed)
       startAuthoritativeTimer(room)
@@ -639,6 +681,12 @@ export function attachArenaManager(io, {
       startAuthoritativeTimer(room)
     } else if (room.game === 'colonnes-du-canyon') {
       room.gameState = createCanyonRaceState(room.seed)
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'arena-helice') {
+      room.gameState = createHelixArenaState(room.seed)
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'duel-de-troncs') {
+      room.gameState = createTrunkDuelState(room.seed)
       startAuthoritativeTimer(room)
     } else if (room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel' || room.game === 'forest-bridge') {
       room.gameState = createAuthoritativeGame(room.game, room.seed)
@@ -677,32 +725,6 @@ export function attachArenaManager(io, {
   }
 
   io.on('connection', (socket) => {
-    socket.on('arena:sportsbook:catalog:request', () => {
-      socket.emit('arena:sportsbook:catalog', demoSportsbook.catalog())
-    })
-
-    socket.on('arena:coupon:history:request', (payload) => {
-      const walletId = typeof payload?.walletId === 'string' && /^[a-z0-9-]{8,64}$/i.test(payload.walletId)
-        ? payload.walletId
-        : null
-      if (!walletId) return
-      socket.emit('arena:coupon:history', { tickets: demoSportsbook.getTickets(walletId) })
-      socket.emit('arena:demo-wallet', { balance: getDemoBalance(walletId) })
-    })
-
-    socket.on('arena:coupon:place', (payload, callback) => {
-      const result = demoSportsbook.placeCoupon({
-        walletId: payload?.walletId,
-        selections: payload?.selections,
-        stake: payload?.stake,
-        idempotencyKey: payload?.idempotencyKey,
-      })
-      if (!result.ok) return callback?.(result)
-      socket.emit('arena:demo-wallet', { balance: result.balance })
-      socket.emit('arena:coupon:history', { tickets: demoSportsbook.getTickets(payload.walletId) })
-      callback?.(result)
-    })
-
     socket.on('arena:room:create', (payload, callback) => {
       if (!GAME_IDS.has(payload?.game)) return callback?.({ ok: false, error: 'Jeu en ligne inconnu.' })
       if (lookup(socket)) return callback?.({ ok: false, error: 'Vous êtes déjà dans une salle.' })
@@ -718,7 +740,15 @@ export function attachArenaManager(io, {
       if (!reserveDemoStake(player, stake)) {
         return callback?.({ ok: false, error: 'Solde de démonstration insuffisant pour cette mise.' })
       }
-      const room = makeRoom(payload.game, [player], { isPublic: payload?.isPublic === true, stake })
+      const wordSearchCategory = payload?.game === 'word-search'
+        && (payload?.category === '*' || Object.hasOwn(WORD_SEARCH_CATEGORIES, payload?.category))
+        ? payload.category
+        : '*'
+      const room = makeRoom(payload.game, [player], {
+        isPublic: payload?.isPublic === true,
+        stake,
+        wordSearchCategory,
+      })
       acknowledge(socket, callback, room, player)
     })
 
@@ -900,6 +930,25 @@ export function attachArenaManager(io, {
       } else if (room.game === 'memo-5x5' && payload?.type === 'memory-flip') {
         const result = flipMemoCard(room.gameState, player.slot, payload.cardId)
         if (!result.ok) return callback?.(result)
+      } else if (room.game === 'word-search' && payload?.type === 'word-search:select') {
+        const result = submitWordSearchWord(room.gameState.wordSearch, player.slot, payload.start, payload.end)
+        if (!result.ok) return callback?.(result)
+        room.gameState.scores = [...room.gameState.wordSearch.scores]
+        if (room.gameState.wordSearch.status === 'finished') {
+          room.gameState.winner = room.gameState.wordSearch.winner
+          room.phase = 'finished'
+          room.players.forEach((entry) => { entry.ready = false })
+          stopGameTimer(room)
+        }
+      } else if (room.game === 'dictation-duel' && payload?.type === 'dictation:submit') {
+        const result = submitDictationAnswer(room.gameState.dictation, player.slot, payload.answer)
+        if (!result.ok) return callback?.(result)
+        room.gameState.scores = [...room.gameState.dictation.scores]
+        if (room.gameState.dictation.status === 'finished') {
+          room.phase = 'finished'
+          room.players.forEach((entry) => { entry.ready = false })
+          stopGameTimer(room)
+        }
       } else if (room.game === 'tap-tape-arena' && payload?.type === 'tap') {
         const now = Date.now()
         if (now - player.lastActionAt < 65) {
@@ -929,7 +978,8 @@ export function attachArenaManager(io, {
       const state = boundedObject(payload?.state, 24_000)
       if (!room || room.phase !== 'running' || room.game === 'tic-tac-toe'
         || room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel'
-        || room.game === 'forest-bridge' || room.game === 'princess-race' || room.game === 'damned-maze' || room.game === 'head-football' || !state) {
+        || room.game === 'forest-bridge' || room.game === 'princess-race' || room.game === 'damned-maze'
+        || room.game === 'head-football' || room.game === 'arena-helice' || room.game === 'duel-de-troncs' || !state) {
         return callback?.({ ok: false, error: 'État de partie non autorisé ou invalide.' })
       }
       if (room.game === 'ball-rush') {
@@ -979,7 +1029,7 @@ export function attachArenaManager(io, {
     socket.on('arena:room:finish', (_payload, callback) => {
       const entry = lookup(socket)
       if (!entry || entry.room.phase !== 'running' || entry.player.slot !== 0
-      || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon'].includes(entry.room.game)) {
+      || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs'].includes(entry.room.game)) {
         return callback?.({ ok: false, error: 'Cette manche ne peut pas être terminée par ce joueur.' })
       }
       entry.room.phase = 'finished'
@@ -1040,6 +1090,24 @@ export function attachArenaManager(io, {
       }
       if (room.game === 'colonnes-du-canyon') {
         if (!applyCanyonRaceInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Commande invalide ou partie terminée.' })
+        }
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'arena-helice') {
+        if (!applyHelixArenaInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Commande invalide ou partie terminée.' })
+        }
+        const opponent = room.players.find((item) => item.slot !== player.slot)
+        if (opponent?.connected && opponent.socketId) {
+          io.to(opponent.socketId).emit('arena:remote-input', { slot: player.slot, input })
+        }
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'duel-de-troncs') {
+        if (!applyTrunkDuelInput(room.gameState, player.slot, input)) {
           return callback?.({ ok: false, error: 'Commande invalide ou partie terminée.' })
         }
         callback?.({ ok: true })

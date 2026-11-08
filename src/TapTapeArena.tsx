@@ -54,7 +54,7 @@ html,body{height:100%;background:#7fdcfa url('/images/memo-sky.svg') center/100%
   <div id="arena"><canvas id="cv"></canvas></div>
   <div class="zone p1"><button class="btn" id="btn0">Tape</button><div class="score" id="s0">0<small>/100</small></div><div class="lbl">Joueur 1</div></div>
 </div>
-<div id="ov"><h1>Tape-Tape</h1><p>Premier à 100 · Ça recule si tu ralentis · Touches A et L</p><button id="go">Jouer</button></div>
+<div id="ov"><h1>Tape-Tape</h1><p>Premier à 100 · J1 : A/Q · J2 : L/M · Mobile : touchez votre bouton Tape</p><button id="go">Jouer</button></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const $=s=>document.querySelector(s),cv=$('#cv'),ov=$('#ov');

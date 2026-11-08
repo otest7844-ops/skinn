@@ -33,13 +33,21 @@ header{position:fixed;z-index:4;top:max(26px,env(safe-area-inset-top));left:max(
 @media(max-height:500px) and (min-width:601px){header{top:10px}.title-block{top:13%}h1{font-size:70px;margin-bottom:4px}.tagline{font-size:13px}.launch{bottom:9%}.primary{min-height:49px;padding:8px 26px;font-size:23px}.hint{margin-top:9px;font-size:11px}.footer{display:none}#score{top:49px;font-size:45px}.result h2{font-size:35px}.result .sprig{display:none}.stats{margin:15px 0}.stats dd{font-size:39px}.result .hint{display:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+<style>
+#coin-count{position:fixed;top:max(155px,calc(env(safe-area-inset-top) + 130px));left:0;right:0;text-align:center;color:#8a5a18;font:700 16px system-ui,sans-serif;opacity:0;pointer-events:none}
+.playing #coin-count,.paused #coin-count{opacity:1}
+#obstacle-warning{position:fixed;top:max(225px,calc(env(safe-area-inset-top) + 195px));left:50%;z-index:3;transform:translateX(-50%);border:1px solid #9a462c;border-radius:999px;background:#fff0d9e8;padding:8px 14px;color:#7a2c20;font:800 12px system-ui,sans-serif;letter-spacing:.08em;opacity:0;pointer-events:none;white-space:nowrap}
+#obstacle-warning.visible{opacity:1;animation:obstacle-pulse 1s ease-in-out infinite alternate}
+@keyframes obstacle-pulse{to{transform:translateX(-50%) scale(1.04);background:#ffd9c8}}
+@media(max-width:600px){#coin-count{top:145px;font-size:14px}#obstacle-warning{top:190px;font-size:11px}}
+</style>
 </head>
 <body>
 <main id="world"><canvas id="game" tabindex="0" aria-label="Mosswing. Tap, click, or press Space to flap through the gaps. One collision ends your flight."></canvas></main>
 <div class="haze"></div>
 <header><div class="brand"><svg viewBox="0 0 28 42" aria-hidden="true"><path d="M16 2C-1 16 1 30 11 33C25 34 31 20 16 2Z M4 40L22 15"/></svg><span>MOSSWING</span></div><div class="utilities"><div class="best">BEST<span id="best">00</span></div><button id="pause" class="icon-button" aria-label="Pause game"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button><button id="sound" class="icon-button" aria-label="Mute sound" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M11 4 5 9H2v6h3l6 5Z"/><path class="sound-wave" d="M15 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/><path class="mute-slash" d="m15 9 6 6m0-6-6 6"/></svg></button></div></header>
 <section id="intro"><div class="title-block"><h1>Mosswing</h1><p class="tagline">Small wings. Endless wonder.</p></div><div class="launch"><button id="start" class="primary">Take flight<svg viewBox="0 0 28 24" aria-hidden="true"><path d="M2 12h23M16 3l9 9-9 9"/></svg></button><p class="hint">Tap anywhere or press space</p></div><div class="footer">ONE TAP. ONE MORE TRY.</div></section>
-<output id="score" aria-label="Gaps passed">0</output><div id="tap-hint">TAP TO KEEP YOUR WINGS UP</div>
+<output id="score" aria-label="Obstacles franchis">0</output><output id="coin-count" aria-label="Pièces collectées">🪙 0 pièce</output><div id="obstacle-warning" role="status">Obstacle en approche !</div><div id="tap-hint">TOUCHEZ POUR VOLER</div>
 <section id="gameover" class="veil" aria-hidden="true"><div class="result"><svg class="sprig" viewBox="0 0 28 42" aria-hidden="true"><path d="M16 2C-1 16 1 30 11 33C25 34 31 20 16 2Z M4 40L22 15"/></svg><h2>A little further?</h2><p id="result-message">Every flight starts with a little lift.</p><dl class="stats"><div><dt>THIS FLIGHT</dt><dd id="final-score">0</dd></div><div><dt>PERSONAL BEST</dt><dd id="final-best">0</dd></div></dl><button id="retry" class="primary">Fly again<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8a8 8 0 1 0 1 7M19 3v6h-6"/></svg></button><p class="new-best" id="record"></p><p class="hint">Tap anywhere or press space</p></div></section>
 <section id="paused" class="veil" aria-hidden="true"><div class="result"><h2>A quiet moment.</h2><p>Your garden will wait.</p><button id="resume" class="primary" style="margin-top:28px">Keep flying<svg viewBox="0 0 28 24" aria-hidden="true"><path d="M2 12h23M16 3l9 9-9 9"/></svg></button></div></section>
 <div id="flash"></div><div id="error" role="alert"><h2>A moment on the ground.</h2><p>This garden needs WebGL. Try opening it in a current version of Safari or Chrome.</p><button class="primary" id="reload">Try again</button></div>
@@ -86,7 +94,8 @@ class FlightModel {
   constructor(random = Math.random) { this.random = random; this.limit=5.5; this.reset(-3); }
   reset(x) {
     this.x=x; this.y=0; this.vy=0; this.score=0; this.alive=true; this.distance=0;
-    this.gates=Array.from({length:6},(_,i)=>({x:x+5.9+i*5.1,center:i===0?.1:this.nextCenter(),passed:false}));
+    this.coins=0;this.elapsed=0;this.nextCoinAt=5;
+    this.gates=Array.from({length:6},(_,i)=>({x:x+5.9+i*8.5,center:i===0?.1:this.nextCenter(),passed:false}));
   }
   nextCenter() { return (this.random()-.5)*2.2; }
   flap() { if(this.alive)this.vy=6.5; }
@@ -94,9 +103,11 @@ class FlightModel {
     if(!this.alive)return {hit:false,passed:0};
     const speed=2.4+Math.min(this.score,35)*.008;
     this.vy=Math.max(-8.5,this.vy-14.5*dt); this.y+=this.vy*dt; this.distance+=speed*dt;
+    this.elapsed+=dt;
+    while(this.elapsed>=this.nextCoinAt){if(Math.abs(this.y)<1.1)this.coins++;this.nextCoinAt+=5;}
+    for(const g of this.gates)g.x-=speed*dt;
     let hit=this.y-.27<-this.limit||this.y+.27>this.limit,passed=0;
-    for(const g of this.gates){
-      g.x-=speed*dt;
+    for(const g of this.elapsed>=10?this.gates:[]){
       if(Math.abs(g.x-this.x)<.83){
         const dx=Math.max(Math.abs(g.x-this.x)-.56,0);
         const half=1.82;
@@ -109,8 +120,8 @@ class FlightModel {
         if(dx*dx+dy*dy<.27*.27)hit=true;
       }
     }
-    if(!hit)for(const g of this.gates){if(!g.passed&&g.x+.56<this.x-.27){g.passed=true;this.score++;passed++;}}
-    for(const g of this.gates)if(g.x<this.x-7){g.x=Math.max(...this.gates.map(p=>p.x))+5.1;g.center=this.nextCenter();g.passed=false;}
+    if(!hit&&this.elapsed>=10)for(const g of this.gates){if(!g.passed&&g.x+.56<this.x-.27){g.passed=true;this.score++;passed++;}}
+    for(const g of this.gates)if(g.x<this.x-7){g.x=Math.max(...this.gates.map(p=>p.x))+8.5;g.center=this.nextCenter();g.passed=false;}
     this.alive=!hit; return {hit,passed};
   }
 }
@@ -216,6 +227,13 @@ function poseGate(g,x,center){
  g.root.position.x=x;g.lower.position.y=-6.7;g.lower.scale.y=bottom+6.7;g.upper.position.y=top;g.upper.scale.y=7.8-top;
  g.lowCap.position.y=bottom;g.upCap.position.y=top;
 }
+const coinMeshes=Array.from({length:3},()=>{
+ const root=new THREE.Group(),coin=new THREE.Mesh(
+  new THREE.CylinderGeometry(.3,.3,.09,24),
+  new THREE.MeshStandardMaterial({color:0xffc83d,metalness:.78,roughness:.22,emissive:0x9a5c08,emissiveIntensity:.2}),
+ );
+ coin.rotation.x=Math.PI/2;root.add(coin);scene.add(root);return root;
+});
 
 const creature=new THREE.Group(),bodyPivot=new THREE.Group();creature.add(bodyPivot);scene.add(creature);
 const peach=mat(0xe88d42,false),ivory=mat(0xffe4a8,false),ink=mat(0x243e34,false);
@@ -245,7 +263,7 @@ function note(freq,end,duration,volume=.05,delay=0,type='sine'){
 }
 function setState(next){state=next;document.body.className=next;for(const[id,visible]of[['gameover',next==='over'],['paused',next==='paused']]){$(id).classList.toggle('visible',visible);$(id).setAttribute('aria-hidden',String(!visible));$(id).inert=!visible;}$('intro').inert=next!=='ready';}
 function start(){
- oldBest=best;model.reset(-worldW*.23);homeIsland.position.x=-worldW*.48-1;creature.position.set(model.x,model.y,0);creature.rotation.set(0,0,0);bodyPivot.rotation.set(0,0,0);deathAge=0;runAge=0;accumulator=0;previous=performance.now();$('score').textContent='0';$('tap-hint').classList.add('visible');setState('playing');canvas.focus({preventScroll:true});flap();
+ oldBest=best;model.reset(-worldW*.23);homeIsland.position.x=-worldW*.48-1;creature.position.set(model.x,model.y,0);creature.rotation.set(0,0,0);bodyPivot.rotation.set(0,0,0);deathAge=0;runAge=0;accumulator=0;previous=performance.now();$('score').textContent='0';$('coin-count').textContent='🪙 0 pièce';$('tap-hint').classList.add('visible');setState('playing');canvas.focus({preventScroll:true});flap();
 }
 function flap(){model.flap();wingKick=1;puff(3);note(420,760,.095,.035);}
 function act(){unlockAudio();if(state==='ready'||state==='over'&&deathAge>.85)start();else if(state==='playing')flap();else if(state==='paused')resume();}
@@ -299,6 +317,12 @@ function render(dt){
    particleData.forEach((p,i)=>{p.x+=p.vx*dt-(state==='playing'?.7*dt:0);p.y+=p.vy*dt;if(p.burst){p.life-=dt;if(p.life<=0){p.x=range(-worldW/2,worldW/2);p.y=range(-6,6);p.z=range(-10,-2);p.vx=-.12;p.vy=.03;p.burst=false;}}if(p.x<-worldW/2-2)p.x=worldW/2+2;if(p.y>7)p.y=-6;particlePositions.set([p.x,p.y,p.z],i*3);});particleGeo.attributes.position.needsUpdate=true;
  }
  if(state==='ready'){gateMeshes.forEach((g,i)=>{g.root.visible=i<3;const x=worldW*((worldW<8?.46:.26)+i*.29);poseGate(g,x,i%2?.55:.2);});}else gateMeshes.forEach((g,i)=>{g.root.visible=true;poseGate(g,model.gates[i].x,model.gates[i].center);});
+ if(state==='playing'&&runAge<10)gateMeshes.forEach(g=>g.root.visible=false);
+ const speed=2.4+Math.min(model.score,35)*.008,untilCoin=Math.max(0,model.nextCoinAt-model.elapsed);
+ coinMeshes.forEach((coin,index)=>{const x=model.x+untilCoin*speed+index*5*speed;coin.visible=state==='playing'&&x<worldW/2+5;coin.position.set(x,.22+Math.sin(elapsed*3+index)*.08,0);coin.rotation.y=elapsed*1.8+index;});
+ $('coin-count').textContent='🪙 '+model.coins+(model.coins===1?' pièce':' pièces');
+ const nextGate=model.gates.reduce((nearest,gate)=>gate.x>model.x&&(!nearest||gate.x<nearest.x)?gate:nearest,null);
+ $('obstacle-warning').classList.toggle('visible',state==='playing'&&runAge>=10&&Boolean(nextGate)&&nextGate.x-model.x<14);
  shake=Math.max(0,shake-dt*.7);camera.position.x=shake?Math.sin(elapsed*90)*shake:0;camera.position.y=4.2+(shake?Math.cos(elapsed*100)*shake:0);
  renderer.render(scene,camera);
 }

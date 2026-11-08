@@ -6,9 +6,11 @@ import './ArcadeOnline.css'
 import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
+import GameControlsGuide from './GameControlsGuide'
 import { HEAD_FOOTBALL_CLUBS, HEAD_FOOTBALL_PLAYERS, type HeadFootballSelection } from './head-football-data'
+import { WORD_SEARCH_CATEGORIES } from '../shared/word-search.mjs'
 
-export type OnlineGame = 'football-19' | 'head-football' | 'tap-tape-arena' | 'memo-5x5'
+export type OnlineGame = 'football-19' | 'head-football' | 'tap-tape-arena' | 'memo-5x5' | 'word-search' | 'dictation-duel'
 type Player = { slot: number; you: boolean; name: string; connected: boolean; ready: boolean }
 export type HeadFootballMatch = {
   status: 'count' | 'play' | 'goal' | 'finished'
@@ -22,6 +24,7 @@ export type HeadFootballMatch = {
 export type ArenaRoomView = {
   code: string
   game: OnlineGame
+  category?: string
   phase: 'waiting' | 'countdown' | 'running' | 'paused' | 'finished'
   round: number
   countdownEndsAt: number | null
@@ -40,6 +43,32 @@ export type ArenaRoomView = {
     totalMoves?: number
     elapsedSeconds?: number
     opened?: number[]
+    wordSearch?: {
+      size: number
+      category: string
+      grid: string[]
+      placements: Array<{ word: string; cells: number[] }>
+      words: string[]
+      found: Array<{ word: string; cells: number[]; slot: number; points: number }>
+      scores: [number, number]
+      foundCounts: [number, number]
+      status: 'playing' | 'finished'
+      winner: number | null
+      startedAt: number
+      elapsedSeconds: number
+    }
+    dictation?: {
+      status: 'playing' | 'finished'
+      phase: 'playing' | 'intermission' | 'finished'
+      round: number
+      scores: [number, number]
+      sentence: string
+      roundStartedAt: number
+      roundDeadline: number
+      roundRemainingMs: number
+      lastResult: { round: number; winnerSlot: number | null; correct: boolean; elapsedMs: number } | null
+      winner: number | null
+    }
   } | null
   yourSlot: number
   stake?: number
@@ -73,6 +102,7 @@ export default function ArenaRoom({
   const [codeInput, setCodeInput] = useState('')
   const [clubIndex, setClubIndex] = useState(0)
   const [playerIndex, setPlayerIndex] = useState(0)
+  const [wordSearchCategory, setWordSearchCategory] = useState('*')
   const [publicRoom, setPublicRoom] = useState(true)
   const [stake, setStake] = useState('500')
   const [joinStake, setJoinStake] = useState('500')
@@ -188,6 +218,7 @@ export default function ArenaRoom({
       walletId: getDemoWalletId(),
       isPublic: publicRoom,
       stake: Number(stake),
+      ...(game === 'word-search' ? { category: wordSearchCategory } : {}),
     })
   }
 
@@ -259,10 +290,20 @@ export default function ArenaRoom({
         <main className="arcade-lobby-card">
           <span className="arcade-lobby-eyebrow"><Users size={15} /> 1 CONTRE 1 · EN LIGNE</span>
           <h1>{room ? 'Salon de duel' : 'Jouez à deux'}</h1>
+          <GameControlsGuide
+            game={game}
+            playerSlot={room ? room.yourSlot === 1 ? 1 : 0 : null}
+          />
           {!room ? <>
             <label className="arcade-field">Votre pseudo<input value={name} maxLength={18} onChange={(event) => setName(event.target.value)} placeholder="Joueur" /></label>
             <button type="button" className="arcade-secondary-button" onClick={() => setView('solo')}>Jouer en solo</button>
-            {(game === 'head-football' || game === 'memo-5x5') && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>Mode local · 2 joueurs</button>}
+            {(game === 'head-football' || game === 'memo-5x5' || game === 'word-search') && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>Mode local · 2 joueurs</button>}
+            {game === 'word-search' && <label className="arcade-field">Catégorie de la grille
+              <select value={wordSearchCategory} onChange={(event) => setWordSearchCategory(event.target.value)}>
+                <option value="*">Mixte</option>
+                {Object.keys(WORD_SEARCH_CATEGORIES).map((category) => <option key={category}>{category}</option>)}
+              </select>
+            </label>}
             <label className="arcade-field">Mise en crédits démo<input type="number" min="1" max="1000000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} /></label>
             <label className="arcade-public-toggle"><input type="checkbox" checked={publicRoom} onChange={(event) => setPublicRoom(event.target.checked)} /> Afficher mon salon sur l’accueil</label>
             <button type="button" className="arcade-primary-button" disabled={!connected} onClick={createRoom}>Créer une salle</button>

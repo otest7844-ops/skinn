@@ -24,7 +24,7 @@ export default function HeadFootballGame({
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const touchRef = useRef<HeadFootballInput[]>([{ ...EMPTY_INPUT }, { ...EMPTY_INPUT }])
-  const slots = local ? [0, 1] : room ? [room.yourSlot] : []
+  const slots = local ? [0, 1] : room ? [room.yourSlot] : [0]
   const activeSlot = room?.yourSlot
 
   function sendTouch(slot: number) {
@@ -65,7 +65,7 @@ export default function HeadFootballGame({
 
   useEffect(() => () => {
     touchRef.current = [{ ...EMPTY_INPUT }, { ...EMPTY_INPUT }]
-    const activeSlots = local ? [0, 1] : activeSlot === undefined ? [] : [activeSlot]
+    const activeSlots = local ? [0, 1] : activeSlot === undefined ? [0] : [activeSlot]
     activeSlots.forEach((slot) => {
       frameRef.current?.contentWindow?.postMessage({
         type: 'head-football:touch',

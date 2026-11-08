@@ -10,13 +10,13 @@ export default function SimpleIntro({ onEnter }: { onEnter: () => void }) {
   }, [onEnter])
 
   return (
-    <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center gap-8 overflow-hidden bg-[#08050d]">
-      <ChicagoWordmark className="chicago-intro-logo h-auto w-[min(90vw,460px)]" />
-      <div className="flex items-center gap-2" role="status" aria-label="Chargement">
+    <div className="chrome-intro fixed inset-0 z-[150] flex flex-col items-center justify-center gap-8 overflow-hidden">
+      <ChicagoWordmark className="chrome-intro-wordmark h-auto w-[min(90vw,540px)]" />
+      <div className="flex items-center gap-2.5" role="status" aria-label="Chargement">
         {Array.from({ length: 5 }, (_, index) => (
           <span
             key={index}
-            className="chicago-loading-dot h-2.5 w-2.5 rounded-full bg-pink-400"
+            className="chrome-loading-dot h-2 w-2 rounded-full"
             style={{ animationDelay: `${index * 120}ms` }}
           />
         ))}

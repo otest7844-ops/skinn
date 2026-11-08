@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Clipboard, LoaderCircle, Users, Wifi, WifiOff } from 
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './MosswingOnline.css'
+import GameControlsGuide from './GameControlsGuide'
 import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
@@ -313,6 +314,7 @@ export default function TicTacToeOnline({
             {view === 'menu' && <>
               <span className="mosswing-eyebrow">QUANTUM DUEL · 1 CONTRE 1</span>
               <h1>Choisissez votre partie</h1>
+              <GameControlsGuide game="tic-tac-toe" />
               <label className="mosswing-name-field"><span>Votre pseudo</span><input value={nickname} maxLength={18} onChange={(event) => { nicknameRef.current = event.target.value; setNickname(event.target.value) }} placeholder="Pilote" /></label>
               <div className="mosswing-actions">
                 <button type="button" className="mosswing-primary" onClick={() => { setView('solo'); setFrameReady(false) }}>Jouer en solo</button>

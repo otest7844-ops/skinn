@@ -15,12 +15,15 @@ type PlayerState = {
   connected: boolean
   ready: boolean
   score: number
+  coins: number
   alive: boolean
   name: string
   x: number
   y: number
   vy: number
   distance: number
+  elapsed: number
+  nextCoinAt: number
 }
 type GateState = { id: number; x: number; center: number }
 type RoomState = {
@@ -138,6 +141,7 @@ function mosswingApplyState(data){
  mosswingTargets=data.players.map(function(player){
   const old=previous.get(player.slot);
   return {slot:player.slot,you:player.you,connected:player.connected,alive:player.alive,name:player.name,score:player.score,
+   coins:player.coins,elapsed:player.elapsed,nextCoinAt:player.nextCoinAt,distance:player.distance,
    fromX:old?old.x:player.x,toX:player.x,fromY:old?old.y:player.y,toY:player.y,
    x:player.x,y:player.y,vy:player.vy,receivedAt:now};
  });
@@ -163,7 +167,7 @@ function mosswingMovePlayer(player,group,pivot,fromWing){
  group.position.set(x,y,0);
  const body=pivot||group.children[0];
  body.rotation.z=player.alive?Math.max(-.75,Math.min(.38,player.vy*.055)):-.9;
- if(fromWing){model.x=x;model.y=y;model.vy=player.vy;model.score=player.score;model.alive=player.alive;$('score').textContent=String(player.score);}
+ if(fromWing){model.x=x;model.y=y;model.vy=player.vy;model.score=player.score;model.coins=player.coins;model.elapsed=player.elapsed;model.nextCoinAt=player.nextCoinAt;model.distance=player.distance;model.alive=player.alive;$('score').textContent=String(player.score);$('coin-count').textContent='🪙 '+player.coins+(player.coins===1?' pièce':' pièces');}
 }
 function mosswingUpdateCharacters(){
  if(!mosswingOnlineState||!mosswingRemote)return;
@@ -177,6 +181,8 @@ function mosswingUpdateCharacters(){
    if(data){const age=Math.min(1,Math.max(0,(performance.now()-data.receivedAt)/100));poseGate(gate,data.fromX+(data.toX-data.fromX)*age,data.center);}
   });
  }
+ const nextGate=mosswingGateTargets.filter(function(gate){return gate.toX>model.x;}).sort(function(a,b){return a.toX-b.toX;})[0];
+ $('obstacle-warning').classList.toggle('visible',Boolean(local&&local.elapsed>=10&&nextGate&&nextGate.toX-model.x<14));
 }
 window.addEventListener('message',function(event){
  if(event.source!==window.parent||!event.data)return;
@@ -205,6 +211,7 @@ window.addEventListener('message',function(event){
   state='playing';document.body.className=state;previous=performance.now();accumulator=0;canvas.focus({preventScroll:true});
  }
  if(event.data.type==='mosswing:set-muted'&&Boolean(event.data.muted)!==muted)$('sound').click();
+ if(event.data.type==='mosswing:manual-flap')act();
 });
 `
 
@@ -496,6 +503,10 @@ export default function MosswingOnline({
     }
   }
 
+  function requestFlap() {
+    frameRef.current?.contentWindow?.postMessage({ type: 'mosswing:manual-flap' }, '*')
+  }
+
   const players = room?.players ?? []
   const self = players.find((player) => player.you)
   const opponent = players.find((player) => !player.you)
@@ -589,6 +600,9 @@ export default function MosswingOnline({
                   Jouer en solo
                 </button>
               </div>
+              <p className="mosswing-help mosswing-controls-summary">
+                Commandes : Espace ou ↑ pour voler; P / Échap pour pause. Sur mobile, touchez l’écran ou le bouton VOLER.
+              </p>
               <div className="mosswing-utility-actions">
                 <button type="button" onClick={() => setShowSettings((open) => !open)}><Settings size={16} /> Paramètres</button>
                 <button type="button" onClick={() => setShowHelp((open) => !open)}><Info size={16} /> Comment jouer</button>
@@ -599,7 +613,7 @@ export default function MosswingOnline({
                   <span>{muted ? <VolumeX size={17} /> : <Volume2 size={17} />} Son du jeu</span>
                 </label>
               )}
-              {showHelp && <p className="mosswing-help">Touchez l’écran ou appuyez sur Espace pour battre des ailes. Évitez les piliers : chaque passage augmente votre score.</p>}
+              {showHelp && <p className="mosswing-help">Espace ou ↑ pour voler; P / Échap pour mettre en pause. Le vol commence sans obstacle pendant 10 secondes, puis un signal annonce les piliers. Une pièce apparaît toutes les 5 secondes : restez près du centre pour la récupérer.</p>}
               {queued && <p className="mosswing-status"><LoaderCircle size={16} className="mosswing-spin" /> Recherche d’un joueur…</p>}
               {!connected && <p className="mosswing-status">Démarrez aussi le serveur Mosswing pour créer des salles.</p>}
             </div>
@@ -684,9 +698,9 @@ export default function MosswingOnline({
       {view === 'playing' && room && (
         <>
           <div className="mosswing-duel-hud">
-            <div className="mosswing-score-card is-you"><span>{self?.name ?? 'VOUS'}</span><strong>{self?.score ?? 0}</strong><small>{self?.alive === false ? 'Éliminé' : 'En vol'}</small></div>
+            <div className="mosswing-score-card is-you"><span>{self?.name ?? 'VOUS'}</span><strong>{self?.score ?? 0}</strong><small>🪙 {self?.coins ?? 0} · {self?.alive === false ? 'Éliminé' : 'En vol'}</small></div>
             <span className="mosswing-vs">VS</span>
-            <div className="mosswing-score-card"><span>{opponent?.name ?? 'ADVERSAIRE'}</span><strong>{opponent?.score ?? 0}</strong><small>{opponent?.connected ? (opponent.alive ? 'En vol' : 'Éliminé') : 'Reconnexion…'}</small></div>
+            <div className="mosswing-score-card"><span>{opponent?.name ?? 'ADVERSAIRE'}</span><strong>{opponent?.score ?? 0}</strong><small>🪙 {opponent?.coins ?? 0} · {opponent?.connected ? (opponent.alive ? 'En vol' : 'Éliminé') : 'Reconnexion…'}</small></div>
           </div>
           {room.phase === 'paused' && (
             <div className="mosswing-reconnect-notice"><WifiOff size={18} /> Connexion interrompue — attente de reconnexion…</div>
@@ -724,10 +738,16 @@ export default function MosswingOnline({
       )}
 
       {view === 'solo' && (
+        <>
         <div className="mosswing-solo-controls">
           <button type="button" onClick={() => setView('menu')} aria-label="Retour au menu"><X size={19} /></button>
-          <span>Mode solo · Touchez pour voler</span>
+          <span>Solo · Espace / ↑ pour voler</span>
         </div>
+        <button type="button" className="mosswing-flap-button" onPointerDown={(event) => event.preventDefault()} onClick={requestFlap}>VOLER</button>
+        </>
+      )}
+      {view === 'playing' && room?.phase === 'running' && self?.alive !== false && (
+        <button type="button" className="mosswing-flap-button" onPointerDown={(event) => event.preventDefault()} onClick={requestFlap}>VOLER · Espace / ↑</button>
       )}
 
       {view === 'playing' && room && self?.alive === false && room.phase === 'running' && (

@@ -6,62 +6,80 @@ export default function ChicagoWordmark({ className = '' }: ChicagoWordmarkProps
   return (
     <svg
       className={className}
-      viewBox="0 0 460 190"
+      viewBox="0 0 640 190"
       role="img"
       aria-label="Chicago"
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <linearGradient id="chicago-fire" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#fff" />
-          <stop offset="58%" stopColor="#fff" />
-          <stop offset="76%" stopColor="#ff40b5" />
-          <stop offset="100%" stopColor="#f000a8" />
+        <linearGradient id="chicago-chrome" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="var(--chicago-chrome-1, #f3f3f5)" />
+          <stop offset="8%" stopColor="var(--chicago-chrome-2, #767680)" />
+          <stop offset="16%" stopColor="var(--chicago-chrome-3, #e4e4e8)" />
+          <stop offset="27%" stopColor="var(--chicago-chrome-4, #35353d)" />
+          <stop offset="43%" stopColor="var(--chicago-chrome-5, #b9b9c1)" />
+          <stop offset="55%" stopColor="var(--chicago-chrome-6, #24242b)" />
+          <stop offset="71%" stopColor="var(--chicago-chrome-7, #d7d7dc)" />
+          <stop offset="82%" stopColor="var(--chicago-chrome-8, #55555e)" />
+          <stop offset="100%" stopColor="var(--chicago-chrome-9, #17171d)" />
         </linearGradient>
-        <filter id="chicago-glow" x="-20%" y="-20%" width="140%" height="150%">
-          <feDropShadow dx="3" dy="5" stdDeviation="1.5" floodColor="#a000bd" />
-          <feDropShadow dx="0" dy="3" stdDeviation="8" floodColor="#ff009d" floodOpacity=".65" />
+        <linearGradient id="chicago-drip" x1="0" x2="0" y1="0" y2="1">
+          <stop stopColor="var(--chicago-drip-1, #d9d9de)" />
+          <stop offset=".18" stopColor="var(--chicago-drip-2, #45454e)" />
+          <stop offset=".42" stopColor="var(--chicago-drip-3, #bcbcc4)" />
+          <stop offset=".7" stopColor="var(--chicago-drip-4, #25252c)" />
+          <stop offset="1" stopColor="var(--chicago-drip-5, #777780)" />
+        </linearGradient>
+        <filter id="chicago-chrome-bevel" x="-10%" y="-20%" width="120%" height="150%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="blur" />
+          <feSpecularLighting
+            in="blur"
+            surfaceScale="4"
+            specularConstant=".85"
+            specularExponent="18"
+            lightingColor="#fff"
+            result="shine"
+          >
+            <fePointLight x="-240" y="-180" z="160" />
+          </feSpecularLighting>
+          <feComposite in="shine" in2="SourceAlpha" operator="in" result="bevel" />
+          <feMerge>
+            <feMergeNode in="SourceGraphic" />
+            <feMergeNode in="bevel" />
+          </feMerge>
         </filter>
       </defs>
-      <g filter="url(#chicago-glow)">
+      <g filter="url(#chicago-chrome-bevel)">
+        <path
+          d="M66 107c15-4 25-2 35 1v42c0 11 12 11 12 0l2-42c15 2 28 2 43 0v30c0 12 12 13 13 0l2-31c16 2 30 1 43-2v43c0 12 13 12 13 0l1-45c15 1 29 1 44-1v29c0 13 13 12 13 0v-31c15 2 29 1 42-1v48c0 12 13 12 13 0l1-51c15 1 29 0 43-2v35c0 11 13 12 13 0l1-37c16 2 30 0 43-2v45c0 12 13 13 13 0v-47c15 1 29-1 43-3v61c0 13 14 13 14 0l1-64c14 0 29-2 44-6v-8H66Z"
+          fill="url(#chicago-drip)"
+          stroke="#202027"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
         <text
-          x="230"
-          y="122"
+          x="320"
+          y="116"
           textAnchor="middle"
-          fill="url(#chicago-fire)"
-          stroke="#26002d"
-          strokeWidth="5"
+          textLength="570"
+          lengthAdjust="spacingAndGlyphs"
+          fill="url(#chicago-chrome)"
+          stroke="var(--chicago-wordmark-stroke, #101015)"
+          strokeWidth="8"
           paintOrder="stroke"
-          fontFamily="Bangers, Impact, 'Arial Black', sans-serif"
-          fontSize="106"
+          fontFamily="Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif"
+          fontSize="102"
           fontWeight="900"
-          letterSpacing="1"
+          letterSpacing="2"
+          filter="url(#chicago-chrome-bevel)"
         >
           CHICAGO
         </text>
         <path
-          d="M66 113c6 10-8 17-5 29 8-5 9-12 13-16 5 10 1 17-5 24-7 9-8 17-5 25 8-8 12-15 14-24 2-10 6-16 12-22 3 12-1 20-5 29-5 11-2 20 3 25 2-11 10-17 12-27 2-8 4-14 10-19 0 13 3 20 8 25 2-10 2-16 7-25 5-10 10-17 11-29Z"
-          fill="#ed00a8"
-          stroke="#ff72d1"
-          strokeWidth="2"
-        />
-        <path
-          d="M168 112c7 12-7 19-4 30 7-5 10-12 14-17 3 12-2 20-8 29-6 10-6 17-2 24 6-8 11-15 13-24 2-9 5-15 11-20 1 12-3 19-7 28-4 9-3 18 2 24 4-10 10-16 13-25 3-9 6-15 12-20 0 12 3 19 8 24 2-10 3-16 8-24 5-9 9-16 10-29Z"
-          fill="#ed00a8"
-          stroke="#ff72d1"
-          strokeWidth="2"
-        />
-        <path
-          d="M278 112c6 11-7 18-4 30 7-5 10-12 14-17 4 11-1 19-7 28-7 10-7 18-3 25 7-9 11-15 14-24 2-9 6-15 12-21 1 12-3 20-7 29-5 10-3 18 2 24 4-10 10-16 13-25 3-8 6-14 12-19 0 12 3 19 8 24 2-10 3-17 8-25 5-9 9-16 10-29Z"
-          fill="#ed00a8"
-          stroke="#ff72d1"
-          strokeWidth="2"
-        />
-        <path
-          d="M378 113c6 10-8 17-5 29 8-5 10-12 13-16 5 10 1 18-5 26-7 9-8 17-5 24 7-8 11-15 13-24 2-9 6-15 12-21 2 12-2 20-6 29-4 10-2 18 3 24 3-10 10-16 12-26 2-8 5-14 11-19 0 12 3 19 8 24 2-10 2-16 7-25 5-10 10-17 11-29Z"
-          fill="#ed00a8"
-          stroke="#ff72d1"
-          strokeWidth="2"
+          d="M95 116c8 2 15 2 22 0v38c0 8-11 9-12 0v-20c-1-8-10-9-10-1Zm94 0c8 2 15 2 22 0v51c0 9-11 9-12 0v-29c0-7-10-8-10-1Zm128-2c8 2 15 2 22 0v34c0 9-12 9-12 0v-17c0-8-10-8-10 0Zm129-5c8 2 15 2 22 0v48c0 9-12 9-12 0v-28c0-7-10-8-10-1Zm122-10c8 2 15 2 22 0v70c0 10-12 10-12 0v-44c0-8-10-8-10-1Z"
+          fill="url(#chicago-drip)"
+          stroke="#292930"
+          strokeWidth="1.5"
         />
       </g>
     </svg>

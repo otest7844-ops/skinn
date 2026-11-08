@@ -21,9 +21,9 @@ npm run server
 
 ## Arcade duels
 
-Quantum Duel (Tic-Tac-Toe), Football 19, Tape-Tape Arena, Ping-Pong,
+Quantum Duel (Tic-Tac-Toe), Football 19, Tape-Tape Arena, Mémo 5×5, Chasse aux mots, Dictée Éclair, Ping-Pong,
 Basketball Stars, Ball Rush 3D, Pont de la forêt 3D, Le Labyrinthe des Damnés,
-La Course vers la Princesse, and Mosswing use two-player rooms.
+La Course vers la Princesse, Arène Hélice, Duel de Troncs, and Mosswing use two-player rooms.
 Football 19 compares five penalty shots per player, and Tape-Tape synchronizes
 the tap race scores and server-side idle decay while each player controls only
 their own lane. Ping-Pong and Basketball run
@@ -38,6 +38,24 @@ six-character room code.
 
 Only games with actual bundled game engines can currently be played online.
 The home-screen demo cards do not yet have game engines and are not online games.
+
+### Chasse aux mots
+
+The word-search game uses the supplied puzzle artwork in the catalogue. It can
+be played against an adjustable AI, locally by two players, or online in a
+public or private six-character room. Each match has a shared 8×8 board with
+10 non-overlapping words from the selected category; players drag across
+letters in any of eight directions. Online, the server validates each word,
+tracks length-weighted scores, and settles only demo-credit stakes.
+
+### Dictée Éclair
+
+The supplied Three.js typing duel is available as
+`public/games/dictee-eclair.html` for the solo mode. Online rooms use the same
+sentence-copy challenge in a best-of-three match: both players receive one
+shared phrase per round, and the server validates the submitted copy, round
+deadline, score, and winner. Public/private six-character rooms and demo-credit
+stakes use the existing arena room flow.
 
 Ping-Pong Arena and Basketball Stars keep their original Canvas clients and
 offline modes, while online rounds use server-side fixed-step physics. Clients
@@ -73,16 +91,20 @@ existing 10-minute waiting, 5-minute empty-room, 60-second reconnection, and
 2-minute result-retention timers. The supplied castle and forest-bridge images
 are used as their respective game artwork.
 
-### Cartes de paris sportifs (démo)
+### Arène Hélice and Duel de Troncs
 
-La page Paris sportifs affiche des cartes de rencontres et un coupon combiné.
-Les cotes et rencontres sont des données de démonstration; le serveur vérifie
-les sélections, fixe les cotes, débite atomiquement le portefeuille de crédits
-démo et protège les validations répétées. Les tickets restent « en attente » :
-aucun fournisseur de matchs/résultats ni règlement n'est configuré. Le solde et
-l'historique de démonstration sont en mémoire et sont réinitialisés au
-redémarrage du serveur. Aucun dépôt, retrait ou paiement en argent réel n'est
-pris en charge.
+The supplied 3D games and artwork are bundled as
+`public/games/arena-helice.html`, `public/games/duel-de-troncs.html`,
+`public/images/arena-helice.gif`, and `public/images/duel-de-troncs.jpg`.
+Both keep their original solo and local controls and can also be played in
+public or private six-character rooms. The room server validates movement,
+simulates hazards and round scoring, and settles demo-credit stakes; phone
+players can use the on-screen controls.
+
+### Fonctions retirées
+
+Les paris sportifs et le jeu 4 Crochets ne sont plus proposés dans l'interface
+et leurs fonctions dédiées ont été retirées du serveur.
 
 ### PowerShell and phone testing
 
@@ -103,7 +125,8 @@ On two phones connected to the same Wi-Fi, open the Vite network URL printed by
 the development server. The phones must also be able to reach port `3001` on
 the computer running the server; allow that port through the computer's
 firewall if needed. Create a maze room on one phone and join its six-character
-code on the other. This local setup does not make the game available between
+code on the other. Arène Hélice and Duel de Troncs can be tested the same way.
+This local setup does not make the game available between
 different networks.
 
 The shared deposit and result animations play automatically in online rooms.

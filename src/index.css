@@ -36,8 +36,27 @@ body {
 }
 
 body[data-theme="dark"] {
-  background-color: #0B0D19;
+  background-color: #000000;
   color: #FFFFFF;
+}
+
+body[data-theme="dark"] .desktop-app-shell {
+  background-color: #000000;
+  background-image: none;
+}
+
+body[data-theme="dark"] [class~="bg-[#0B0D19]"] {
+  background-color: #000000 !important;
+}
+
+body[data-theme="dark"] [class~="bg-[#161928]"],
+body[data-theme="dark"] [class~="hover:bg-[#1f2338]"]:hover {
+  background-color: #080808 !important;
+}
+
+body[data-theme="dark"] .chicago-world::before,
+body[data-theme="dark"] .chicago-world::after {
+  display: none;
 }
 
 body[data-theme="light"] {
@@ -184,6 +203,23 @@ body[data-theme="lime"] [class~="shadow-purple-600/30"] {
   animation: chicagoLoadingDot 600ms ease-in-out infinite alternate;
 }
 
+.chrome-intro {
+  background:
+    radial-gradient(ellipse at center, rgb(126 126 140 / 0.1), transparent 42%),
+    #030304;
+}
+
+.chrome-intro-wordmark {
+  filter: drop-shadow(0 0 18px rgb(195 195 210 / 0.15));
+  animation: chicagoIntroReveal 650ms ease-out both;
+}
+
+.chrome-loading-dot {
+  background: linear-gradient(180deg, #e0e0e5, #46464f 55%, #a5a5ae);
+  box-shadow: 0 0 10px rgb(195 195 210 / 0.24);
+  animation: chicagoLoadingDot 600ms ease-in-out infinite alternate;
+}
+
 @keyframes chicagoIntroReveal {
   from { opacity: 0; transform: scale(0.82); }
   to { opacity: 1; transform: scale(1); }
@@ -260,6 +296,7 @@ body[data-theme="lime"] [class~="shadow-purple-600/30"] {
   font-weight: 900;
   filter: drop-shadow(0 0 12px currentColor);
   animation: chicagoTokenFloat 5s ease-in-out infinite;
+  will-change: transform;
 }
 
 .chicago-ambient-coin {
@@ -314,7 +351,9 @@ body[data-theme="lime"] [class~="shadow-purple-600/30"] {
   .chicago-ambient-token,
   .promotion-track,
   .chicago-intro-logo,
-  .chicago-loading-dot {
+  .chicago-loading-dot,
+  .chrome-intro-wordmark,
+  .chrome-loading-dot {
     animation: none;
   }
 }
@@ -327,4 +366,109 @@ html {
 /* Tap active effects */
 button, a {
   user-select: none;
+}
+
+button:not(:disabled), a {
+  touch-action: manipulation;
+}
+
+button:not(:disabled):active, a:active {
+  transform: scale(0.97);
+}
+
+#root img {
+  opacity: 0;
+  transition: opacity 240ms ease-out;
+}
+
+#root img.is-image-loaded {
+  opacity: 1;
+}
+
+body[data-theme="neon"] {
+  --chicago-wordmark-stroke: #39102f;
+  --chicago-chrome-1: #fff4fc;
+  --chicago-chrome-2: #f054b8;
+  --chicago-chrome-3: #ffc8eb;
+  --chicago-chrome-4: #a33a83;
+  --chicago-chrome-5: #fa86cf;
+  --chicago-chrome-6: #6c245f;
+  --chicago-chrome-7: #ffe0f4;
+  --chicago-chrome-8: #bd55a1;
+  --chicago-chrome-9: #5b194b;
+  --chicago-drip-1: #ffc0e8;
+  --chicago-drip-2: #64204f;
+  --chicago-drip-3: #f06abc;
+  --chicago-drip-4: #4a1742;
+  --chicago-drip-5: #d653a8;
+  background-color: #0a0610;
+  color: #fff2fc;
+}
+
+body[data-theme="neon"] .desktop-app-shell {
+  background-color: #0a0610 !important;
+  background-image:
+    radial-gradient(ellipse at 82% 0%, rgb(219 39 119 / 0.28), transparent 34rem),
+    radial-gradient(ellipse at 8% 30%, rgb(126 34 206 / 0.24), transparent 30rem),
+    radial-gradient(ellipse at 95% 78%, rgb(203 24 126 / 0.26), transparent 32rem),
+    linear-gradient(155deg, #0a0610 0%, #14091c 54%, #2a0d2b 100%) !important;
+  color: #fff2fc;
+}
+
+body[data-theme="neon"] .chicago-world::before {
+  background:
+    radial-gradient(ellipse at 12% 18%, rgb(168 53 255 / 0.19), transparent 34%),
+    radial-gradient(ellipse at 88% 36%, rgb(255 42 178 / 0.17), transparent 30%),
+    radial-gradient(ellipse at 55% 90%, rgb(125 40 220 / 0.13), transparent 34%);
+}
+
+body[data-theme="neon"] .chicago-world::after {
+  background-image: radial-gradient(circle, rgb(255 151 221 / 0.72) 1px, transparent 1.5px);
+}
+
+body[data-theme="neon"] .chicago-ambient-coin {
+  border-color: rgb(255 177 229 / 0.9);
+  color: #fff0fb;
+  background: radial-gradient(circle at 30% 25%, #fff0fa, #ec4899 45%, #7e1b74 100%);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.24), 0 0 22px rgb(236 72 153 / 0.5);
+  text-shadow: 0 1px 3px #521047;
+}
+
+body[data-theme="neon"] .chicago-ambient-diamond {
+  color: #ff78d0;
+  text-shadow: 0 0 8px #ff42bd, 0 0 24px rgb(255 48 190 / 0.8);
+}
+
+body[data-theme="neon"] .chicago-ambient-star {
+  color: #c493ff;
+  text-shadow: 0 0 8px #ad62ff, 0 0 24px rgb(173 98 255 / 0.8);
+}
+
+body[data-theme="neon"] .chrome-intro {
+  background:
+    radial-gradient(ellipse at 50% 78%, rgb(226 35 151 / 0.32), transparent 42%),
+    radial-gradient(ellipse at 50% 24%, rgb(116 40 179 / 0.24), transparent 48%),
+    #0a0610;
+}
+
+body[data-theme="neon"] .chrome-intro-wordmark,
+body[data-theme="neon"] .chicago-header-wordmark,
+body[data-theme="neon"] .desktop-brand-mark {
+  filter: drop-shadow(0 0 12px rgb(236 72 153 / 0.35));
+}
+
+body[data-theme="neon"] .chrome-loading-dot {
+  background: linear-gradient(180deg, #ffe5f6, #ec4899 55%, #a855f7);
+  box-shadow: 0 0 10px rgb(236 72 153 / 0.48);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
