@@ -10,11 +10,13 @@
     envVars:
       - key: NODE_VERSION
         value: 22
+      - key: NODE_ENV
+        value: production
 
   # Interface React + Vite
   - type: static
     name: skinn-app
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_MULTIPLAYER_URL
