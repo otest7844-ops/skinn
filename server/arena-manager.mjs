@@ -1,7 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto'
 import { applyAuthoritativeInput, createAuthoritativeGame, tickAuthoritativeGame } from './authoritative-arcade.mjs'
 import { createHeadFootballMatch, sanitizeHeadFootballInput, tickHeadFootballMatch } from './head-football.mjs'
-import { createMemoMatch, flipMemoCard, tickMemoMatch } from './memo-game.mjs'
+import { createMemoMatch, flipMemoCard, memoPlayerSnapshot, tickMemoMatch } from './memo-game.mjs'
 import {
   createWordSearchMatch,
   submitWordSearchWord,
@@ -27,8 +27,29 @@ import {
   tickHelixArena,
   tickTrunkDuel,
 } from './supplied-arcade-games.mjs'
+import {
+  createChessDuelState,
+  createSniperDuelState,
+  submitChessMove,
+  tickSniperDuel,
+  updateSniperDuelScore,
+} from './chess-duel.mjs'
+import {
+  applyCardDuelInput,
+  applyColorPathInput,
+  applyMotoTaxiInput,
+  cardDuelPlayerSnapshot,
+  colorPathPlayerSnapshot,
+  createCardDuelMatch,
+  createColorPathMatch,
+  createMotoTaxiMatch,
+  motoTaxiPlayerSnapshot,
+  tickCardDuelMatch,
+  tickColorPathMatch,
+  tickMotoTaxiMatch,
+} from './supplied-three-games.mjs'
 
-const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs'])
+const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade', 'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes'])
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const TAP_TICK_MS = 50
 const TAP_SNAPSHOT_MS = 100
@@ -57,6 +78,8 @@ function isForestRace(room) {
   return room.game === 'forest-bridge' || room.game === 'princess-race'
     || room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon'
     || room.game === 'arena-helice' || room.game === 'duel-de-troncs'
+    || room.game === 'moto-taxi-afrique' || room.game === 'chemin-de-couleurs'
+    || room.game === 'duel-de-cartes'
 }
 
 function boundedObject(value, maxLength) {
@@ -70,7 +93,7 @@ function boundedObject(value, maxLength) {
 }
 
 export function attachArenaManager(io, {
-  countdownMs = 3000,
+  countdownMs = 10_000,
   forestWaitingMs = 10 * 60_000,
   forestEmptyMs = 5 * 60_000,
   forestDisconnectMs = 60_000,
@@ -133,9 +156,11 @@ export function attachArenaManager(io, {
     if (room.gameState) {
       room.gameState.winner = winnerSlot
       if (room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon'
-        || room.game === 'arena-helice' || room.game === 'duel-de-troncs') {
+        || room.game === 'arena-helice' || room.game === 'duel-de-troncs'
+        || room.game === 'moto-taxi-afrique' || room.game === 'chemin-de-couleurs'
+        || room.game === 'duel-de-cartes') {
         room.gameState.status = 'finished'
-        room.gameState.players.forEach((state) => {
+        room.gameState.players?.forEach((state) => {
           if (state.input?.direction !== undefined) state.input = { direction: 0, targetZ: null }
           else if (state.input?.x !== undefined) state.input = { x: 0, z: 0, jump: false }
           else state.input = null
@@ -373,6 +398,21 @@ export function attachArenaManager(io, {
           return player
         }),
       }
+    } else if (room.game === 'moto-taxi-afrique' && gameState) {
+      gameState = motoTaxiPlayerSnapshot(gameState)
+    } else if (room.game === 'chemin-de-couleurs' && gameState) {
+      gameState = colorPathPlayerSnapshot(
+        gameState,
+        room.players.findIndex((player) => player.token === recipientToken),
+      )
+    } else if (room.game === 'duel-de-cartes' && gameState) {
+      gameState = cardDuelPlayerSnapshot(
+        gameState,
+        room.players.findIndex((player) => player.token === recipientToken),
+      )
+    } else if (room.game === 'memo-5x5' && gameState) {
+      const slot = room.players.findIndex((player) => player.token === recipientToken)
+      gameState = memoPlayerSnapshot(gameState, slot)
     }
     return {
       code: room.code,
@@ -489,6 +529,10 @@ export function attachArenaManager(io, {
       else if (room.game === 'colonnes-du-canyon') tickCanyonRace(room.gameState, dt)
       else if (room.game === 'arena-helice') tickHelixArena(room.gameState, dt)
       else if (room.game === 'duel-de-troncs') tickTrunkDuel(room.gameState, dt)
+      else if (room.game === 'embuscade') tickSniperDuel(room.gameState, dt)
+      else if (room.game === 'moto-taxi-afrique') tickMotoTaxiMatch(room.gameState, dt)
+      else if (room.game === 'chemin-de-couleurs') tickColorPathMatch(room.gameState, now)
+      else if (room.game === 'duel-de-cartes') tickCardDuelMatch(room.gameState, now)
       else tickAuthoritativeGame(room.gameState, dt)
       if ((room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon')
         && room.gameState.status === 'finished') {
@@ -496,6 +540,11 @@ export function attachArenaManager(io, {
         return
       }
       if ((room.game === 'arena-helice' || room.game === 'duel-de-troncs')
+        && room.gameState.status === 'finished') {
+        finishForestRoom(room, room.gameState.winner)
+        return
+      }
+      if (['moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes'].includes(room.game)
         && room.gameState.status === 'finished') {
         finishForestRoom(room, room.gameState.winner)
         return
@@ -513,7 +562,7 @@ export function attachArenaManager(io, {
         stopGameTimer(room)
         if (room.game === 'damned-maze') scheduleMazeFinishedExpiry(room)
       }
-      const broadcastInterval = room.game === 'arena-helice' ? 33 : 50
+      const broadcastInterval = room.game === 'arena-helice' ? 33 : room.game === 'embuscade' ? 250 : 50
       if (now - room.lastGameBroadcastAt >= broadcastInterval || finished) {
         room.lastGameBroadcastAt = now
         broadcast(room)
@@ -568,6 +617,8 @@ export function attachArenaManager(io, {
         ? { board: Array(9).fill(0), turn: 0, scores: [0, 0], winner: null }
         : game === 'ball-rush'
           ? { players: [null, null] }
+          : game === 'chess-3d'
+            ? createChessDuelState()
           : game === 'football-19'
             ? { scores: [0, 0], attempts: [0, 0] }
             : game === 'head-football'
@@ -688,6 +739,20 @@ export function attachArenaManager(io, {
     } else if (room.game === 'duel-de-troncs') {
       room.gameState = createTrunkDuelState(room.seed)
       startAuthoritativeTimer(room)
+    } else if (room.game === 'chess-3d') {
+      room.gameState = createChessDuelState()
+    } else if (room.game === 'embuscade') {
+      room.gameState = createSniperDuelState()
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'moto-taxi-afrique') {
+      room.gameState = createMotoTaxiMatch()
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'chemin-de-couleurs') {
+      room.gameState = createColorPathMatch(room.seed)
+      startAuthoritativeTimer(room)
+    } else if (room.game === 'duel-de-cartes') {
+      room.gameState = createCardDuelMatch(room.seed)
+      startAuthoritativeTimer(room)
     } else if (room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel' || room.game === 'forest-bridge') {
       room.gameState = createAuthoritativeGame(room.game, room.seed)
       startAuthoritativeTimer(room)
@@ -701,9 +766,12 @@ export function attachArenaManager(io, {
   function startCountdown(room) {
     if (room.phase === 'countdown' || room.phase === 'running') return
     if (room.players.length !== 2 || room.players.some((player) => !player.connected || !player.ready)) return
+    const roomCountdownMs = room.game === 'forest-bridge'
+      ? Math.min(countdownMs, 500)
+      : countdownMs
     room.phase = 'countdown'
-    room.countdownEndsAt = Date.now() + countdownMs
-    room.countdownTimer = setTimeout(() => startRound(room), countdownMs)
+    room.countdownEndsAt = Date.now() + roomCountdownMs
+    room.countdownTimer = setTimeout(() => startRound(room), roomCountdownMs)
     room.countdownTimer.unref?.()
     broadcast(room)
   }
@@ -979,7 +1047,8 @@ export function attachArenaManager(io, {
       if (!room || room.phase !== 'running' || room.game === 'tic-tac-toe'
         || room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel'
         || room.game === 'forest-bridge' || room.game === 'princess-race' || room.game === 'damned-maze'
-        || room.game === 'head-football' || room.game === 'arena-helice' || room.game === 'duel-de-troncs' || !state) {
+        || room.game === 'head-football' || room.game === 'arena-helice' || room.game === 'duel-de-troncs'
+        || room.game === 'chess-3d' || !state) {
         return callback?.({ ok: false, error: 'État de partie non autorisé ou invalide.' })
       }
       if (room.game === 'ball-rush') {
@@ -1016,6 +1085,15 @@ export function attachArenaManager(io, {
           room.players.forEach((entry) => { entry.ready = false })
           stopGameTimer(room)
         }
+      } else if (room.game === 'embuscade') {
+        const result = updateSniperDuelScore(room.gameState, player.slot, state)
+        if (!result.ok) return callback?.(result)
+        if (room.gameState.status === 'finished') {
+          room.phase = 'finished'
+          room.winnerSlot = room.gameState.winner
+          room.players.forEach((entry) => { entry.ready = false })
+          stopGameTimer(room)
+        }
       } else {
         if (player.slot !== 0) {
           return callback?.({ ok: false, error: 'Seul le joueur hôte peut publier cet état.' })
@@ -1029,7 +1107,7 @@ export function attachArenaManager(io, {
     socket.on('arena:room:finish', (_payload, callback) => {
       const entry = lookup(socket)
       if (!entry || entry.room.phase !== 'running' || entry.player.slot !== 0
-      || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs'].includes(entry.room.game)) {
+      || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade'].includes(entry.room.game)) {
         return callback?.({ ok: false, error: 'Cette manche ne peut pas être terminée par ce joueur.' })
       }
       entry.room.phase = 'finished'
@@ -1045,10 +1123,23 @@ export function attachArenaManager(io, {
       if (!room || room.phase !== 'running' || room.game === 'tic-tac-toe' || !input) {
         return callback?.({ ok: false, error: 'Entrée de jeu non autorisée ou invalide.' })
       }
+      if (room.game === 'chess-3d') {
+        const result = submitChessMove(room.gameState, player.slot, input.from, input.to)
+        if (!result.ok) return callback?.(result)
+        if (room.gameState.status === 'finished') {
+          room.phase = 'finished'
+          room.winnerSlot = room.gameState.winner
+          room.players.forEach((entry) => { entry.ready = false })
+        }
+        broadcast(room)
+        callback?.({ ok: true })
+        return
+      }
       if (room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel') {
         if (!applyAuthoritativeInput(room.gameState, player.slot, input)) {
           return callback?.({ ok: false, error: 'Action invalide ou non autorisée pour cette manche.' })
         }
+        if (room.game === 'cannon-duel') broadcast(room)
         callback?.({ ok: true })
         return
       }
@@ -1110,6 +1201,34 @@ export function attachArenaManager(io, {
         if (!applyTrunkDuelInput(room.gameState, player.slot, input)) {
           return callback?.({ ok: false, error: 'Commande invalide ou partie terminée.' })
         }
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'moto-taxi-afrique') {
+        if (!applyMotoTaxiInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Commande de conduite invalide ou partie terminée.' })
+        }
+        const opponent = room.players.find((item) => item.slot !== player.slot)
+        if (opponent?.connected && opponent.socketId) {
+          io.to(opponent.socketId).emit('arena:remote-input', { slot: player.slot, input })
+        }
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'chemin-de-couleurs') {
+        if (!applyColorPathInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Case invalide ou phase de réponse inactive.' })
+        }
+        if (room.gameState.status === 'finished') finishForestRoom(room, room.gameState.winner)
+        else broadcast(room)
+        callback?.({ ok: true })
+        return
+      }
+      if (room.game === 'duel-de-cartes') {
+        if (!applyCardDuelInput(room.gameState, player.slot, input)) {
+          return callback?.({ ok: false, error: 'Cette carte n’est pas disponible ou ce n’est pas votre tour.' })
+        }
+        broadcast(room)
         callback?.({ ok: true })
         return
       }

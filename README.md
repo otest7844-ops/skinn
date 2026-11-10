@@ -23,7 +23,9 @@ npm run server
 
 Quantum Duel (Tic-Tac-Toe), Football 19, Tape-Tape Arena, Mémo 5×5, Chasse aux mots, Dictée Éclair, Ping-Pong,
 Basketball Stars, Ball Rush 3D, Pont de la forêt 3D, Le Labyrinthe des Damnés,
-La Course vers la Princesse, Arène Hélice, Duel de Troncs, and Mosswing use two-player rooms.
+La Course vers la Princesse, Grotte aux Couteaux, Colonnes du Canyon, Arène
+Hélice, Duel de Troncs, Échecs 3D, Embuscade, Moto Taxi Afrique, Chemin de
+couleurs 3D, Duel de cartes 3D, and Mosswing use two-player rooms.
 Football 19 compares five penalty shots per player, and Tape-Tape synchronizes
 the tap race scores and server-side idle decay while each player controls only
 their own lane. Ping-Pong and Basketball run
@@ -36,8 +38,25 @@ rounds pause on disconnect and resume after the player reconnects. Run both
 commands above for online matches; each player can create or join a
 six-character room code.
 
+### Échecs 3D et Embuscade
+
+The supplied chess and shooter HTML sources are copied unchanged to
+`public/games/chess-3d.html` and `public/games/embuscade.html`. Separate
+multiplayer bridges connect them to the room service. Chess is a server-validated
+Red-versus-Black turn-based match. Embuscade is a simultaneous 75-second score
+duel: each player runs the supplied mission independently, and the room server
+compares their reported elimination scores.
+
 Only games with actual bundled game engines can currently be played online.
 The home-screen demo cards do not yet have game engines and are not online games.
+
+### Moto Taxi Afrique, Chemin de couleurs, and Duel de cartes
+
+The supplied 3D game pages and artwork are bundled in `public/games/` and
+`public/images/`. Each game can be launched solo or through a public or private
+two-player room. The server validates taxi controls and race progress, checks
+each color-path selection without disclosing the path during the response phase,
+and keeps card hands private until both players have played.
 
 ### Chasse aux mots
 

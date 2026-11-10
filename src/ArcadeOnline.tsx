@@ -3,12 +3,11 @@ import { ArrowLeft, Check, Clipboard, LoaderCircle, Users, Wifi, WifiOff } from 
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './ArcadeOnline.css'
-import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
 import GameControlsGuide from './GameControlsGuide'
 
-export type ArcadeGameId = 'ping-pong' | 'basketball-stars' | 'ball-rush' | 'cannon-duel' | 'forest-bridge' | 'damned-maze' | 'princess-race' | 'grotte-aux-couteaux' | 'colonnes-du-canyon' | 'arena-helice' | 'duel-de-troncs'
+export type ArcadeGameId = 'ping-pong' | 'basketball-stars' | 'ball-rush' | 'forest-bridge' | 'damned-maze' | 'princess-race' | 'grotte-aux-couteaux' | 'colonnes-du-canyon' | 'arena-helice' | 'duel-de-troncs' | 'chess-3d' | 'embuscade' | 'moto-taxi-afrique' | 'chemin-de-couleurs' | 'duel-de-cartes'
 
 type Player = { slot: number; you: boolean; name: string; connected: boolean; ready: boolean }
 type Room = {
@@ -36,7 +35,6 @@ const gameDetails: Record<ArcadeGameId, { title: string; label: string }> = {
   'ping-pong': { title: 'Ping Pong', label: 'PING-PONG' },
   'basketball-stars': { title: 'Basketball Stars', label: 'BASKETBALL' },
   'ball-rush': { title: 'Ball Rush 3D', label: 'BALL RUSH 3D' },
-  'cannon-duel': { title: 'Canon Duel', label: 'CANON DUEL' },
   'forest-bridge': { title: 'Pont de la forêt 3D', label: 'PONT DE LA FORÊT 3D' },
   'damned-maze': { title: 'Le Labyrinthe des Damnés', label: 'LE LABYRINTHE DES DAMNÉS' },
   'princess-race': { title: 'La Course vers la Princesse', label: 'COURSE VERS LA PRINCESSE' },
@@ -44,10 +42,25 @@ const gameDetails: Record<ArcadeGameId, { title: string; label: string }> = {
   'colonnes-du-canyon': { title: 'Colonnes du Canyon', label: 'COLONNES DU CANYON' },
   'arena-helice': { title: 'Arène Hélice', label: 'ARÈNE HÉLICE' },
   'duel-de-troncs': { title: 'Duel de Troncs', label: 'DUEL DE TRONCS' },
+  'chess-3d': { title: 'Échecs 3D', label: 'ÉCHECS 3D' },
+  embuscade: { title: 'Embuscade', label: 'EMBUSCADE' },
+  'moto-taxi-afrique': { title: 'Moto Taxi Afrique', label: 'MOTO TAXI AFRIQUE' },
+  'chemin-de-couleurs': { title: 'Chemin de couleurs 3D', label: 'CHEMIN DE COULEURS' },
+  'duel-de-cartes': { title: 'Duel de cartes 3D', label: 'DUEL DE CARTES' },
 }
 
 function getBridgeName(game: ArcadeGameId) {
   return game === 'basketball-stars' ? 'basketball' : game
+}
+
+function usesInjectedBridge(game: ArcadeGameId) {
+  return game === 'chess-3d' || game === 'embuscade'
+    || game === 'moto-taxi-afrique' || game === 'chemin-de-couleurs'
+    || game === 'duel-de-cartes'
+}
+
+function getGameFile(game: ArcadeGameId) {
+  return game
 }
 
 const helixKeyboardSlots: Record<string, 0 | 1> = {
@@ -124,11 +137,11 @@ export default function ArcadeOnline({
   const [clock, setClock] = useState(0)
   const socketRef = useRef<Socket | null>(null)
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const frameBridgeReadyRef = useRef(false)
   const roomRef = useRef<Room | null>(null)
   const enabledRoundRef = useRef('')
   const finishRequestedRef = useRef(false)
   const attemptedPublicJoinRef = useRef('')
-  const cannonFireAtRef = useRef(0)
   const helixHeldKeysRef = useRef(new Set<string>())
   const trunkHeldKeysRef = useRef(new Set<string>())
   const helixTouchPointersRef = useRef(new Map<number, 'left' | 'right' | 'up' | 'down' | 'jump'>())
@@ -288,7 +301,9 @@ export default function ArcadeOnline({
       if (next.phase !== 'running') finishRequestedRef.current = false
       setView(next.phase === 'running' || next.phase === 'paused'
         || next.phase === 'finished' && (game === 'princess-race' || game === 'damned-maze'
-          || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon') ? 'game' : 'lobby')
+          || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon'
+          || game === 'moto-taxi-afrique' || game === 'chemin-de-couleurs'
+          || game === 'duel-de-cartes') ? 'game' : 'lobby')
       if (next.phase === 'running' || next.phase === 'paused') {
         frameRef.current?.contentWindow?.postMessage({
           type: `${getBridgeName(game)}:${next.phase === 'paused' ? 'pause' : 'resume'}`,
@@ -303,9 +318,10 @@ export default function ArcadeOnline({
     })
     socket.on('arena:remote-input', ({ slot, input }: { slot: number; input: unknown }) => {
       const current = roomRef.current
-      if (current?.game !== game
-        || game === 'arena-helice' && slot === current.yourSlot
-        || game !== 'arena-helice' && slot !== 1) return
+      if (current?.game !== game) return
+      if (game === 'arena-helice' || game === 'moto-taxi-afrique') {
+        if (slot === current.yourSlot) return
+      } else if (slot !== 1) return
       frameRef.current?.contentWindow?.postMessage({ type: `${getBridgeName(game)}:remote-input`, input }, window.location.origin)
     })
     socket.on('arena:expired', ({ message }: { message?: string }) => {
@@ -339,6 +355,7 @@ export default function ArcadeOnline({
   useEffect(() => {
     const current = room
     if (!current || !['running', 'finished'].includes(current.phase) || !frameRef.current?.contentWindow) return
+    if (usesInjectedBridge(game) && !frameBridgeReadyRef.current) return
     const roundKey = `${current.code}-${current.round}`
     if (current.phase === 'running' && enabledRoundRef.current !== roundKey) {
       enabledRoundRef.current = roundKey
@@ -388,7 +405,9 @@ export default function ArcadeOnline({
         return
       }
       if ((game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon'
-        || game === 'arena-helice' || game === 'duel-de-troncs')
+        || game === 'arena-helice' || game === 'duel-de-troncs'
+        || game === 'moto-taxi-afrique' || game === 'chemin-de-couleurs'
+        || game === 'duel-de-cartes')
         && current.phase === 'finished' && message.type === `${getBridgeName(game)}:rematch`) {
         socket.emit('arena:room:rematch', {}, (result: Ack) => {
           if (!result?.ok) setFeedback(result?.error ?? 'Impossible de relancer la partie.')
@@ -397,10 +416,17 @@ export default function ArcadeOnline({
       }
       if (!socket.connected || current.phase !== 'running'
         && !(game === 'princess-race' && current.phase === 'finished')
-        && !((game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon') && current.phase === 'finished')) return
+        && !((game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon'
+          || game === 'moto-taxi-afrique' || game === 'chemin-de-couleurs'
+          || game === 'duel-de-cartes') && current.phase === 'finished')) return
       if (message.type === `${getBridgeName(game)}:input`) {
         socket.emit('arena:input', { input: message.input }, (result: Ack) => {
           if (!result?.ok) {
+            if (game === 'chess-3d') {
+              frameRef.current?.contentWindow?.postMessage({
+                type: 'chess-3d:input-rejected',
+              }, window.location.origin)
+            }
             if (game === 'princess-race') {
               frameRef.current?.contentWindow?.postMessage({
                 type: 'princess-race:rejected',
@@ -417,7 +443,9 @@ export default function ArcadeOnline({
           if (!result?.ok) setFeedback(result.error ?? 'Impossible de relancer la partie.')
         })
       } else if (message.type === `${getBridgeName(game)}:state`) {
-        socket.emit('arena:state', { state: message.state })
+        socket.emit('arena:state', { state: message.state }, (result: Ack) => {
+          if (!result?.ok && game === 'embuscade' && result.error) setFeedback(result.error)
+        })
         const state = message.state as { status?: unknown; state?: unknown } | null
         const hasFinished = game === 'basketball-stars'
           ? state?.status === 'finished'
@@ -447,13 +475,6 @@ export default function ArcadeOnline({
     }
   }
 
-  async function fireCannon() {
-    const now = performance.now()
-    if (now - cannonFireAtRef.current < 1200) return
-    cannonFireAtRef.current = now
-    await perform('arena:input', { input: { type: 'fire' } })
-  }
-
   function sendFrameKey(key: string, code: string, pressed: boolean) {
     const frame = frameRef.current?.contentWindow
     if (!frame) return
@@ -465,8 +486,13 @@ export default function ArcadeOnline({
     }))
   }
 
-  function tapFrameKey(key: string, code: string) {
+  function holdFrameKey(key: string, code: string, event: PointerEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
     sendFrameKey(key, code, true)
+  }
+
+  function releaseFrameKey(key: string, code: string) {
     sendFrameKey(key, code, false)
   }
 
@@ -559,6 +585,12 @@ export default function ArcadeOnline({
   const ownPlayer = room?.players.find((player) => player.you)
   const finishedRoom = room?.phase === 'finished' ? room : null
   const finalScores = finishedRoom ? getScores(finishedRoom.gameState, game) : null
+  const gameStateWinner = finishedRoom?.gameState && typeof finishedRoom.gameState === 'object'
+    ? (finishedRoom.gameState as { winner?: unknown }).winner
+    : null
+  const reportedWinnerSlot = finishedRoom?.winnerSlot === 0 || finishedRoom?.winnerSlot === 1
+    ? finishedRoom.winnerSlot
+    : gameStateWinner === 0 || gameStateWinner === 1 ? gameStateWinner : null
   const mazeState = finishedRoom && game === 'damned-maze'
     ? finishedRoom.gameState as { winner?: number | null; level?: number; result?: string }
     : null
@@ -568,43 +600,81 @@ export default function ArcadeOnline({
       : mazeState.winner === finishedRoom?.yourSlot ? 'Victoire' : 'Défaite'
     : null
   const resultTitle = finalScores && finishedRoom
-    ? game === 'ball-rush' && (finishedRoom.winnerSlot === 0 || finishedRoom.winnerSlot === 1)
-      ? finishedRoom.winnerSlot === finishedRoom.yourSlot ? 'Victoire' : 'Défaite'
+    ? reportedWinnerSlot !== null
+      ? reportedWinnerSlot === finishedRoom.yourSlot ? 'Victoire' : 'Défaite'
       : finalScores[finishedRoom.yourSlot] === finalScores[1 - finishedRoom.yourSlot]
         ? 'Égalité'
         : finalScores[finishedRoom.yourSlot] > finalScores[1 - finishedRoom.yourSlot] ? 'Victoire' : 'Défaite'
     : null
-  const gameStateWinner = finishedRoom?.gameState && typeof finishedRoom.gameState === 'object'
-    ? (finishedRoom.gameState as { winner?: unknown }).winner
-    : null
-  const resolvedWinnerSlot = finishedRoom?.winnerSlot === 0 || finishedRoom?.winnerSlot === 1
-    ? finishedRoom.winnerSlot
-    : gameStateWinner === 0 || gameStateWinner === 1
-      ? gameStateWinner
-      : resultTitle === 'Victoire' || resultTitle === 'Défaite'
-        ? resultTitle === 'Victoire' ? finishedRoom?.yourSlot ?? null : finishedRoom?.yourSlot === 0 ? 1 : 0
-        : null
   const seconds = room?.countdownEndsAt
-    ? clock ? Math.max(1, Math.ceil((room.countdownEndsAt - clock) / 1000)) : 3
+    ? clock ? Math.max(1, Math.ceil((room.countdownEndsAt - clock) / 1000)) : game === 'forest-bridge' ? 1 : 10
     : null
   const details = gameDetails[game]
+  const caveTouchKeys = view === 'local'
+    ? [
+        { label: 'J1 ↑', key: 'w', code: 'KeyW' },
+        { label: 'J1 ↓', key: 's', code: 'KeyS' },
+        { label: 'J2 ↑', key: 'i', code: 'KeyI' },
+        { label: 'J2 ↓', key: 'k', code: 'KeyK' },
+      ]
+    : [
+        {
+          label: '↑',
+          key: room?.yourSlot === 1 ? 'ArrowUp' : view === 'solo' ? 'ArrowUp' : 'w',
+          code: room?.yourSlot === 1 || view === 'solo' ? 'ArrowUp' : 'KeyW',
+        },
+        {
+          label: '↓',
+          key: room?.yourSlot === 1 || view === 'solo' ? 'ArrowDown' : 's',
+          code: room?.yourSlot === 1 || view === 'solo' ? 'ArrowDown' : 'KeyS',
+        },
+      ]
 
   return (
     <section className={`arcade-online-screen${game === 'princess-race' ? ' arcade-online-screen--princess' : ''}`} aria-label={`Salon ${details.title}`}>
-      {view === 'solo' || view === 'local' || view === 'game' && (room?.phase === 'running' || room?.phase === 'paused' || room?.phase === 'finished' && (game === 'princess-race' || game === 'damned-maze' || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon' || game === 'arena-helice' || game === 'duel-de-troncs')) ? (
+      {view === 'solo' || view === 'local' || view === 'game' && (room?.phase === 'running' || room?.phase === 'paused' || room?.phase === 'finished' && (game === 'princess-race' || game === 'damned-maze' || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon' || game === 'arena-helice' || game === 'duel-de-troncs' || game === 'moto-taxi-afrique' || game === 'chemin-de-couleurs' || game === 'duel-de-cartes')) ? (
         <>
           <iframe
             ref={frameRef}
             className="arcade-game-frame"
-            src={game === 'ping-pong' && view !== 'game'
-              ? '/games/ping-pong.html'
-              : `/games/${game === 'ping-pong' ? 'ping-pong-online' : game}.html`}
+            src={`/games/${getGameFile(game)}.html${game === 'grotte-aux-couteaux' ? '?v=mobile-portrait-2' : ''}`}
             title={details.title}
             onLoad={() => {
-              if (view === 'local' && game === 'cannon-duel') {
-                frameRef.current?.contentWindow?.postMessage({ type: 'cannon-duel:local' }, window.location.origin)
+              const frame = frameRef.current?.contentWindow
+              if (usesInjectedBridge(game) && frame) {
+                frameBridgeReadyRef.current = false
+                const script = frame.document.createElement('script')
+                script.src = `/games/${getBridgeName(game)}-online.js`
+                script.onload = () => {
+                  frameBridgeReadyRef.current = true
+                  const current = roomRef.current
+                  if (!current || !['running', 'paused', 'finished'].includes(current.phase)) return
+                  enabledRoundRef.current = `${current.code}-${current.round}`
+                  frame.postMessage({
+                    type: `${getBridgeName(game)}:enable`,
+                    slot: current.yourSlot,
+                    phase: current.phase,
+                    seed: current.seed,
+                    names: current.players.map((player) => player.name),
+                  }, window.location.origin)
+                  if (current.gameState) {
+                    frame.postMessage({
+                      type: `${getBridgeName(game)}:state`,
+                      state: current.gameState,
+                      slot: current.yourSlot,
+                      phase: current.phase,
+                      names: current.players.map((player) => player.name),
+                    }, window.location.origin)
+                  }
+                  if (current.phase === 'paused') {
+                    frame.postMessage({ type: `${getBridgeName(game)}:pause` }, window.location.origin)
+                  }
+                }
+                script.onerror = () => setFeedback(`Le pont multijoueur de ${details.title} n’a pas pu être chargé.`)
+                frame.document.head.append(script)
                 return
               }
+              frameBridgeReadyRef.current = true
               if (view === 'local' && game === 'damned-maze') {
                 frameRef.current?.contentWindow?.postMessage({ type: 'damned-maze:local' }, window.location.origin)
                 return
@@ -682,21 +752,26 @@ export default function ArcadeOnline({
             {room.players.map((player) => (
               <span key={player.slot} className={player.you ? 'is-you' : ''}>
                 <i className={player.connected ? 'is-connected' : ''} />{player.you ? 'Vous' : player.name}
+                {(game === 'chess-3d' || game === 'embuscade') && (() => {
+                  const scores = getScores(room.gameState, game)
+                  return scores ? ` · ${scores[player.slot]}${game === 'embuscade' ? ' pts' : ' prises'}` : ''
+                })()}
               </span>
             ))}
           </div>}
-          {game === 'cannon-duel' && (view === 'solo' || view === 'local' || room?.phase === 'running') && (
-            <div className="arcade-action-pad" aria-label="Commandes tactiles Canon Duel">
-              {view === 'local' ? (
-                <>
-                  <button type="button" onClick={() => tapFrameKey('w', 'KeyW')}>J1 · Tirer</button>
-                  <button type="button" onClick={() => tapFrameKey(' ', 'Space')}>J2 · Tirer</button>
-                </>
-              ) : (
-                <button type="button" aria-label="Tirer avec votre canon" onClick={() => room ? void fireCannon() : tapFrameKey(' ', 'Space')}>
-                  TIRER
-                </button>
-              )}
+          {game === 'grotte-aux-couteaux' && (view === 'solo' || view === 'local' || room?.phase === 'running') && (
+            <div className="arcade-action-pad arcade-arena-controls" aria-label="Commandes tactiles Grotte aux Couteaux">
+              {caveTouchKeys.map(({ label, key, code }) => (
+                <button
+                  type="button"
+                  key={label}
+                  aria-label={view === 'local' ? `${label.includes('J1') ? 'Joueur 1' : 'Joueur 2'}, ${label.endsWith('↑') ? 'monter' : 'descendre'}` : label === '↑' ? 'Monter' : 'Descendre'}
+                  onPointerDown={(event) => holdFrameKey(key, code, event)}
+                  onPointerUp={() => releaseFrameKey(key, code)}
+                  onPointerCancel={() => releaseFrameKey(key, code)}
+                  onLostPointerCapture={() => releaseFrameKey(key, code)}
+                >{label}</button>
+              ))}
             </div>
           )}
           {game === 'ball-rush' && (view === 'solo' || view === 'local' || room?.phase === 'running') && (
@@ -765,10 +840,16 @@ export default function ArcadeOnline({
               ))}
             </div>
           )}
-              {(game === 'princess-race' || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon' || game === 'arena-helice' || game === 'duel-de-troncs')
+              {(game === 'princess-race' || game === 'grotte-aux-couteaux' || game === 'colonnes-du-canyon' || game === 'arena-helice' || game === 'duel-de-troncs' || game === 'moto-taxi-afrique' || game === 'chemin-de-couleurs' || game === 'duel-de-cartes')
                 && room?.phase === 'finished' && (
                 <div className="arcade-princess-result" role="status">
-                  <strong>{game === 'princess-race'
+                  <strong>{game === 'moto-taxi-afrique'
+                    ? room.winnerSlot === room.yourSlot ? 'Victoire — vous avez livré le premier !' : 'Défaite — votre adversaire a terminé la course en premier.'
+                    : game === 'chemin-de-couleurs'
+                      ? room.winnerSlot === null ? 'Égalité — vous avez atteint le même niveau.' : room.winnerSlot === room.yourSlot ? 'Victoire — vous avez mémorisé le plus long chemin !' : 'Défaite — votre adversaire a mémorisé le plus long chemin.'
+                      : game === 'duel-de-cartes'
+                        ? room.winnerSlot === null ? 'Égalité parfaite !' : room.winnerSlot === room.yourSlot ? 'Victoire — votre main était la plus forte !' : 'Défaite — votre adversaire remporte le duel.'
+                    : game === 'princess-race'
                     ? room.winnerSlot === room.yourSlot ? 'Victoire — la princesse est sauvée !' : 'Défaite — votre adversaire a gagné.'
                     : game === 'colonnes-du-canyon'
                       ? room.winnerSlot === room.yourSlot ? 'Victoire — vous avez atteint le gâteau en premier !' : 'Défaite — votre adversaire a atteint le gâteau.'
@@ -812,9 +893,10 @@ export default function ArcadeOnline({
                   Votre pseudo
                   <input value={nickname} maxLength={18} onChange={(event) => setNickname(event.target.value)} placeholder="Joueur" />
                 </label>
-                <button type="button" className="arcade-secondary-button" onClick={() => setView('solo')}>Jouer en solo</button>
-                {game === 'cannon-duel' && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>2 joueurs sur cet appareil</button>}
-                {['damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs'].includes(game) && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>Jouer en local à deux</button>}
+                {game === 'duel-de-cartes'
+                ? <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>Jouer à deux en local</button>
+                : <button type="button" className="arcade-secondary-button" onClick={() => setView('solo')}>Jouer en solo</button>}
+                {['damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'moto-taxi-afrique'].includes(game) && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>Jouer en local à deux</button>}
                 <label className="arcade-field">Mise en crédits démo
                   <input type="number" min="1" max="1000000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} />
                 </label>
@@ -883,12 +965,6 @@ export default function ArcadeOnline({
           </main>
         </div>
       )}
-      <RoomCeremony
-        room={room}
-        title={details.title}
-        countdown={seconds}
-        winnerSlot={resolvedWinnerSlot}
-      />
     </section>
   )
 }

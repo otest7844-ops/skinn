@@ -26,43 +26,45 @@ export function createMemoMatch(seed, now = Date.now()) {
       isStar: symbol === '⭐',
     })),
     status: 'playing',
-    turn: 0,
-    opened: [],
+    openedBySlot: [[], []],
     scores: [0, 0],
     moves: [0, 0],
     totalMoves: 0,
     elapsedSeconds: 0,
     startedAt: now,
-    resolveAt: null,
+    resolveAtBySlot: [null, null],
     winner: null,
   }
 }
 
 export function flipMemoCard(match, slot, cardId, now = Date.now()) {
   if (match.status !== 'playing') return { ok: false, error: 'La partie est terminée.' }
-  if (match.turn !== slot) return { ok: false, error: 'Ce n’est pas votre tour.' }
-  if (match.opened.length >= 2 || !Number.isInteger(cardId) || cardId < 0 || cardId >= match.cards.length) {
+  if ((slot !== 0 && slot !== 1) || match.openedBySlot[slot].length >= 2
+    || !Number.isInteger(cardId) || cardId < 0 || cardId >= match.cards.length) {
     return { ok: false, error: 'Cette carte ne peut pas être retournée.' }
   }
 
   const card = match.cards[cardId]
-  if (card.isStar || card.matched || card.faceUp) {
+  if (card.isStar || card.matched) {
     return { ok: false, error: 'Cette carte est déjà visible.' }
   }
 
-  card.faceUp = true
-  match.opened.push(cardId)
-  if (match.opened.length < 2) return { ok: true }
+  const opened = match.openedBySlot[slot]
+  opened.push(cardId)
+  if (opened.length < 2) return { ok: true }
 
   match.moves[slot] += 1
   match.totalMoves += 1
-  const [firstId, secondId] = match.opened
+  const [firstId, secondId] = opened
   const first = match.cards[firstId]
   const second = match.cards[secondId]
   if (first.symbol === second.symbol) {
     first.matched = true
     second.matched = true
-    match.opened = []
+    match.openedBySlot.forEach((playerOpened, playerSlot) => {
+      match.openedBySlot[playerSlot] = playerOpened.filter((id) => id !== firstId && id !== secondId)
+      if (match.openedBySlot[playerSlot].length < 2) match.resolveAtBySlot[playerSlot] = null
+    })
     match.scores[slot] += 1
     if (match.scores[0] + match.scores[1] === 12) {
       match.status = 'finished'
@@ -71,19 +73,35 @@ export function flipMemoCard(match, slot, cardId, now = Date.now()) {
         : match.scores[0] > match.scores[1] ? 0 : 1
     }
   } else {
-    match.resolveAt = now + 900
+    match.resolveAtBySlot[slot] = now + 500
   }
   return { ok: true }
+}
+
+export function memoPlayerSnapshot(match, slot) {
+  if (slot !== 0 && slot !== 1) throw new RangeError('Invalid Memo player slot.')
+  const publicMatch = { ...match }
+  delete publicMatch.openedBySlot
+  delete publicMatch.resolveAtBySlot
+  const opened = match.openedBySlot[slot]
+  return {
+    ...publicMatch,
+    cards: match.cards.map((card) => ({
+      ...card,
+      faceUp: card.isStar || card.matched || opened.includes(card.id),
+    })),
+    opened,
+  }
 }
 
 export function tickMemoMatch(match, now = Date.now()) {
   if (match.status !== 'playing') return match
   match.elapsedSeconds = Math.max(0, Math.floor((now - match.startedAt) / 1000))
-  if (match.resolveAt !== null && now >= match.resolveAt) {
-    for (const id of match.opened) match.cards[id].faceUp = false
-    match.opened = []
-    match.turn = 1 - match.turn
-    match.resolveAt = null
+  for (let slot = 0; slot < 2; slot += 1) {
+    if (match.resolveAtBySlot[slot] !== null && now >= match.resolveAtBySlot[slot]) {
+      match.openedBySlot[slot] = []
+      match.resolveAtBySlot[slot] = null
+    }
   }
   return match
 }

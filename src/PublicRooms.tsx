@@ -19,7 +19,6 @@ const TITLES: Record<string, string> = {
   'ping-pong': 'Ping Pong',
   'basketball-stars': 'Basketball Stars',
   'ball-rush': 'Ball Rush 3D',
-  'cannon-duel': 'Canon Duel',
   'football-19': 'Football 19',
   'head-football': 'Head Football',
   'tap-tape-arena': 'Tape-Tape Arena',
@@ -34,6 +33,11 @@ const TITLES: Record<string, string> = {
   'colonnes-du-canyon': 'Colonnes du Canyon',
   'arena-helice': 'Arène Hélice',
   'duel-de-troncs': 'Duel de Troncs',
+  'chess-3d': 'Échecs 3D',
+  embuscade: 'Embuscade',
+  'moto-taxi-afrique': 'Moto Taxi Afrique',
+  'chemin-de-couleurs': 'Chemin de couleurs 3D',
+  'duel-de-cartes': 'Duel de cartes 3D',
 }
 
 const IMAGES: Record<string, string> = {
@@ -41,7 +45,6 @@ const IMAGES: Record<string, string> = {
   'ping-pong': '/images/game-ping-pong.jpg',
   'basketball-stars': '/images/basketball-stars.jpg',
   'ball-rush': '/images/game-ball-rush.jpg',
-  'cannon-duel': '/images/cannon-duel.jpg',
   'football-19': '/images/football-19.jpg',
   'head-football': '/images/football-19.jpg',
   'tap-tape-arena': '/images/tape-tape-arena.jpg',
@@ -56,6 +59,11 @@ const IMAGES: Record<string, string> = {
   'colonnes-du-canyon': '/images/forest-bridge.jpg',
   'arena-helice': '/images/arena-helice.gif',
   'duel-de-troncs': '/images/duel-de-troncs.jpg',
+  'chess-3d': '/images/game-stone.jpg',
+  embuscade: '/images/game-western.svg',
+  'moto-taxi-afrique': '/images/moto-taxi-afrique.jpg',
+  'chemin-de-couleurs': '/images/chemin-de-couleurs.jpg',
+  'duel-de-cartes': '/images/duel-de-cartes.jpg',
 }
 
 export default function PublicRooms({

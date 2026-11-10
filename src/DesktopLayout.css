@@ -1299,3 +1299,82 @@ body[data-theme="neon"] .desktop-main-header .desktop-wordmark > svg > g,
 body[data-theme="neon"] .desktop-brand-mark > g {
   filter: none !important;
 }
+
+.home-games-group + .home-games-group {
+  margin-top: 1rem;
+}
+
+.home-games-group-title {
+  margin: 0 0 0.5rem;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.home-games-row {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.4rem;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.home-games-row::-webkit-scrollbar {
+  display: none;
+}
+
+.home-games-row > .game-category-tile {
+  width: 124px;
+  min-width: 124px;
+  height: 156px;
+  min-height: 156px;
+  flex: 0 0 124px;
+  padding: 0.65rem 0.45rem 0.8rem;
+}
+
+.home-games-row .sports-category-label {
+  right: 0.3rem;
+  bottom: 1.8rem;
+  left: 0.3rem;
+  font-size: 0.72rem;
+}
+
+.home-games-row .sports-category-status {
+  right: 0.2rem;
+  bottom: 0.55rem;
+  left: 0.2rem;
+  font-size: 0.58rem;
+}
+
+.home-games-row > .game-category-tile {
+  scroll-snap-align: start;
+}
+
+.desktop-games-catalog {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .home-games-row > .game-category-tile {
+    width: 132px;
+    min-width: 132px;
+    height: 166px;
+    min-height: 166px;
+    flex-basis: 132px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .home-games-row > .game-category-tile {
+    width: 152px;
+    min-width: 152px;
+    height: 208px;
+    min-height: 208px;
+    flex-basis: 152px;
+  }
+}

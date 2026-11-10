@@ -4,7 +4,6 @@ import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './MosswingOnline.css'
 import GameControlsGuide from './GameControlsGuide'
-import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
 
@@ -382,12 +381,6 @@ export default function TicTacToeOnline({
         </section>
       )}
       {view === 'solo' && <div className="mosswing-solo-controls"><button type="button" onClick={() => setView('menu')} aria-label="Retour au menu"><ArrowLeft size={19} /></button><span>Mode solo</span></div>}
-      <RoomCeremony
-        room={room}
-        title="Quantum Duel"
-        countdown={room?.phase === 'countdown' ? countdown : null}
-        winnerSlot={room?.gameState.winner ?? null}
-      />
     </main>
   )
 }

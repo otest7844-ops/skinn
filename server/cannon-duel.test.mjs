@@ -21,8 +21,31 @@ test('creates a deterministic match and authorizes only the firing player', () =
   assert.deepEqual(first.bullets.map((bullet) => bullet.owner), [0, 1])
 })
 
+test('spawns each cannon shot at its own muzzle and toward the opposing cannon', () => {
+  const blueState = createCannonDuelState(42)
+  blueState.players[0].phase = Math.asin((Math.PI / 2 - 2.546) / 1.095)
+  assert.equal(applyCannonDuelInput(blueState, 0, { type: 'fire' }), true)
+  const blueShot = blueState.bullets[0]
+  assert.equal(blueShot.owner, 0)
+  assert.ok(Math.abs(blueShot.y - 0.23 - 56 / 800) < 1e-12)
+  assert.ok(Math.abs(blueShot.x - FIELD_CENTER_X) < 1e-12)
+  assert.ok(blueShot.vy > 0)
+  assert.equal(blueState.effects[0].owner, 0)
+
+  const redState = createCannonDuelState(42)
+  redState.players[1].phase = Math.asin((3 * Math.PI / 2 - 3.737) / 1.095)
+  assert.equal(applyCannonDuelInput(redState, 1, { type: 'fire' }), true)
+  const redShot = redState.bullets[0]
+  assert.equal(redShot.owner, 1)
+  assert.ok(Math.abs(redShot.y - 0.84 + 56 / 800) < 1e-12)
+  assert.ok(Math.abs(redShot.x - FIELD_CENTER_X) < 1e-12)
+  assert.ok(redShot.vy < 0)
+  assert.equal(redState.effects[0].owner, 1)
+})
+
 test('simulates projectile gravity, opposing projectile clashes, and damage authoritatively', () => {
   const state = createCannonDuelState(7)
+  state.players[0].phase = Math.asin((Math.PI / 2 - 2.546) / 1.095)
   const initialY = state.players[0].phase
   assert.equal(applyCannonDuelInput(state, 0, { type: 'fire' }), true)
   const shot = state.bullets[0]
@@ -51,7 +74,7 @@ test('simulates projectile gravity, opposing projectile clashes, and damage auth
   tickCannonDuel(state, 0.01)
   assert.equal(state.players[1].hp, 19)
   assert.deepEqual(state.score, [1, 0])
-  assert.ok(state.effects.some((effect) => effect.type === 'hit'))
+  assert.ok(state.effects.some((effect) => effect.type === 'hit' && effect.owner === 0))
 })
 
 test('credits self-inflicted damage to the opponent and declares a single winner', () => {

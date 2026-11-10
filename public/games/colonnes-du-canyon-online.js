@@ -56,7 +56,7 @@
     style.textContent = `
       #canyonOnlineControls{position:fixed;z-index:20;left:12px;right:12px;bottom:12px;display:none;justify-content:space-between;align-items:end;pointer-events:none;font:700 14px Arial,sans-serif}
       #canyonOnlineControls button{width:64px;height:58px;border:1px solid rgba(255,230,180,.55);border-radius:16px;background:rgba(44,23,17,.76);color:#fff3d4;font-size:21px;touch-action:none;pointer-events:auto}
-      #canyonOnlineControls .jump{width:88px;height:68px;background:rgba(139,54,30,.82);font-size:14px}
+      #canyonOnlineControls .jump{width:116px;height:88px;background:rgba(139,54,30,.82);font-size:17px}
       #canyonOnlineControls button:focus-visible{outline:3px solid #ffd36b;outline-offset:2px}
     `
     const panel = document.createElement('div')

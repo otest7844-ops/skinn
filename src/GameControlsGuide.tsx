@@ -13,10 +13,6 @@ const controls: Record<string, { keyboard: string[]; touch: string }> = {
     keyboard: ['←/Q : gauche', '→/D : droite', '↑/Z : sauter', '↓/S : glisser', 'Espace : hoverboard'],
     touch: 'Boutons gauche, droite, sauter, glisser et hoverboard dans le jeu.',
   },
-  'cannon-duel': {
-    keyboard: ['J1 : W ou ↑ pour tirer', 'J2 : Espace, Entrée ou ↓ pour tirer', 'P : pause'],
-    touch: 'Touchez votre moitié de l’écran pour tirer.',
-  },
   'forest-bridge': {
     keyboard: ['Clic : choisir la prochaine plateforme'],
     touch: 'Touchez la plateforme suivante pour avancer.',
@@ -44,6 +40,26 @@ const controls: Record<string, { keyboard: string[]; touch: string }> = {
   'duel-de-troncs': {
     keyboard: ['J1 : A/D pour bouger, W ou Espace pour sauter', 'J2 : ←/→ pour bouger, ↑ pour sauter'],
     touch: 'Touchez les commandes de déplacement et d’action affichées à l’écran.',
+  },
+  'chess-3d': {
+    keyboard: ['Touchez ou cliquez une pièce puis sa case de destination.', 'Rouges jouent les premiers; les tours alternent.'],
+    touch: 'Touchez une pièce puis sa case de destination pour la déplacer.',
+  },
+  embuscade: {
+    keyboard: ['Souris : viser; clic gauche ou Espace : tirer', 'C : se couvrir; X : se relever; Maj : stabiliser', 'N/T : thermique; Z ou clic droit : lunette'],
+    touch: 'Glissez pour viser et utilisez les boutons Tirer, Baisser, Se relever, Thermique et Lunette.',
+  },
+  'moto-taxi-afrique': {
+    keyboard: ['J1 : flèches ←/→ pour tourner, ↑ pour accélérer, ↓ pour freiner', 'J2 : A/D pour tourner, W pour accélérer, S pour freiner'],
+    touch: 'Utilisez les boutons directionnels, Gaz et Frein affichés dans le jeu.',
+  },
+  'chemin-de-couleurs': {
+    keyboard: ['Mémorisez la séquence, puis cliquez sur les dalles dans le même ordre.'],
+    touch: 'Mémorisez la séquence lumineuse, puis touchez les dalles dans le même ordre.',
+  },
+  'duel-de-cartes': {
+    keyboard: ['Jouez une carte à votre tour; la carte la plus forte remporte la manche.'],
+    touch: 'Touchez une carte de votre main à votre tour.',
   },
   'memo-5x5': {
     keyboard: ['Cliquez sur une carte pour la retourner.'],

@@ -52,9 +52,11 @@ export default function MemoGame({
   const [turn, setTurn] = useState(0)
   const [seconds, setSeconds] = useState(0)
   const [locked, setLocked] = useState(false)
+  const [optimisticCards, setOptimisticCards] = useState<Set<number>>(() => new Set())
   const lockedRef = useRef(false)
   const firstCardId = useRef<number | null>(null)
   const timeoutIds = useRef<number[]>([])
+  const optimisticTimeouts = useRef(new Map<number, number>())
   const boardRef = useRef<HTMLDivElement>(null)
   const online = Boolean(room)
   const competitive = local || online
@@ -64,13 +66,34 @@ export default function MemoGame({
     : competitive ? scores[0] + scores[1] === SYMBOLS.length : pairs === SYMBOLS.length
 
   useEffect(() => {
+    return () => {
+      optimisticTimeouts.current.forEach(window.clearTimeout)
+      optimisticTimeouts.current.clear()
+    }
+  }, [])
+
+  useEffect(() => {
     if (online) {
-      if (onlineState?.cards) setCards(onlineState.cards)
+      if (onlineState?.cards) {
+        setCards(onlineState.cards)
+        const confirmed = onlineState.cards.filter((card) => card.faceUp || card.matched)
+        if (confirmed.length) {
+          for (const card of confirmed) {
+            const timeoutId = optimisticTimeouts.current.get(card.id)
+            if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+            optimisticTimeouts.current.delete(card.id)
+          }
+          setOptimisticCards((current) => {
+            const next = new Set(current)
+            for (const card of confirmed) next.delete(card.id)
+            return next
+          })
+        }
+      }
       setMoves(onlineState?.totalMoves ?? 0)
       setPairs((onlineState?.scores ?? [0, 0]).reduce((sum, score) => sum + score, 0))
       setScores((onlineState?.scores as [number, number] | undefined) ?? [0, 0])
       setPlayerMoves((onlineState?.moves as [number, number] | undefined) ?? [0, 0])
-      setTurn(onlineState?.turn ?? 0)
       setSeconds(onlineState?.elapsedSeconds ?? 0)
       lockedRef.current = (onlineState?.opened?.length ?? 0) >= 2
       setLocked(lockedRef.current)
@@ -91,6 +114,9 @@ export default function MemoGame({
     }
     timeoutIds.current.forEach(window.clearTimeout)
     timeoutIds.current = []
+    optimisticTimeouts.current.forEach(window.clearTimeout)
+    optimisticTimeouts.current.clear()
+    setOptimisticCards(new Set())
     firstCardId.current = null
     lockedRef.current = false
     setCards(makeBoard())
@@ -106,6 +132,18 @@ export default function MemoGame({
   function flipCard(card: MemoCard) {
     if (lockedRef.current || card.faceUp || card.matched || card.isStar) return
     if (online) {
+      if ((onlineState?.opened?.length ?? 0) + optimisticCards.size >= 2) return
+      setOptimisticCards((current) => new Set(current).add(card.id))
+      const previousTimeout = optimisticTimeouts.current.get(card.id)
+      if (previousTimeout !== undefined) window.clearTimeout(previousTimeout)
+      optimisticTimeouts.current.set(card.id, window.setTimeout(() => {
+        setOptimisticCards((current) => {
+          const next = new Set(current)
+          next.delete(card.id)
+          return next
+        })
+        optimisticTimeouts.current.delete(card.id)
+      }, 1200))
       onAction('memory-flip', { cardId: card.id })
       return
     }
@@ -136,7 +174,7 @@ export default function MemoGame({
         }
         lockedRef.current = false
         setLocked(false)
-      }, 450)
+      }, 180)
       timeoutIds.current.push(timeoutId)
       return
     }
@@ -150,7 +188,7 @@ export default function MemoGame({
       if (local) setTurn((current) => 1 - current)
       lockedRef.current = false
       setLocked(false)
-    }, 900)
+    }, 500)
     timeoutIds.current.push(timeoutId)
   }
 
@@ -175,14 +213,14 @@ export default function MemoGame({
         {competitive && (
           <div className="memo-players">
             {[0, 1].map((slot) => (
-              <span key={slot} className={turn === slot && !won ? 'is-active' : ''}>
-                J{slot + 1} <b>{online ? onlineState?.scores?.[slot] ?? 0 : scores[slot]}</b>
-              </span>
+                <span key={slot} className={!online && turn === slot && !won ? 'is-active' : ''}>
+                  J{slot + 1} <b>{online ? onlineState?.scores?.[slot] ?? 0 : scores[slot]}</b>
+                </span>
             ))}
           </div>
         )}
         <div className="memo-stats">
-          <span>{competitive ? 'Tour' : 'Coups'} <b>{competitive ? `J${turn + 1}` : moves}</b></span>
+          <span>{online ? 'Mode' : local ? 'Tour' : 'Coups'} <b>{online ? 'Simultané' : local ? `J${turn + 1}` : moves}</b></span>
           {competitive && <span>Coups <b>{online ? onlineState?.totalMoves ?? 0 : playerMoves[0] + playerMoves[1]}</b></span>}
           <span>Paires <b>{online ? (onlineState?.scores ?? [0, 0]).reduce((sum, score) => sum + score, 0) : pairs}</b>/12</span>
           <span>⏱ <b>{seconds}</b>s</span>
@@ -198,11 +236,11 @@ export default function MemoGame({
             <button
               key={card.id}
               type="button"
-              className={`memo-card${card.faceUp || card.matched ? ' is-flipped' : ''}${card.isStar ? ' is-star' : ''}${card.matched ? ' is-matched' : ''}`}
+              className={`memo-card${card.faceUp || card.matched || optimisticCards.has(card.id) ? ' is-flipped' : ''}${card.isStar ? ' is-star' : ''}${card.matched ? ' is-matched' : ''}`}
               onClick={() => flipCard(card)}
-              aria-label={card.isStar ? 'Étoile' : card.faceUp || card.matched ? card.symbol : 'Carte cachée'}
-              aria-pressed={card.faceUp || card.matched}
-              disabled={card.isStar || card.matched || locked}
+              aria-label={card.isStar ? 'Étoile' : card.faceUp || card.matched || optimisticCards.has(card.id) ? card.symbol : 'Carte cachée'}
+              aria-pressed={card.faceUp || card.matched || optimisticCards.has(card.id)}
+              disabled={card.isStar || card.matched || locked || optimisticCards.has(card.id)}
             >
               <span className="memo-card-inner">
                 <span className="memo-card-back"><i>+</i></span>

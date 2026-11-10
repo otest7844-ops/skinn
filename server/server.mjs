@@ -9,7 +9,7 @@ import { attachArenaManager } from './arena-manager.mjs'
 
 const PORT = Number(process.env.PORT) || 3001
 const ROUND_LIMIT_MS = 120_000
-const COUNTDOWN_MS = 3_000
+const COUNTDOWN_MS = 10_000
 const STEP_SECONDS = 1 / 120
 const TICK_MS = 1000 / 60
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

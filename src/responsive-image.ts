@@ -7,7 +7,6 @@ const imageWidths: Record<string, number> = {
   '/images/basketball-stars.jpg': 736,
   '/images/game-tic-tac-toe.jpg': 512,
   '/images/game-ping-pong.jpg': 736,
-  '/images/cannon-duel.jpg': 736,
   '/images/game-ball-rush.jpg': 512,
   '/images/mosswing-online.jpg': 241,
   '/images/forest-bridge.jpg': 736,

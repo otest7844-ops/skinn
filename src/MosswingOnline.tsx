@@ -3,7 +3,6 @@ import { ArrowLeft, Check, Clipboard, Info, LoaderCircle, Search, Settings, User
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './MosswingOnline.css'
-import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
 
@@ -757,12 +756,6 @@ export default function MosswingOnline({
           {opponent?.alive && <span>Vous pouvez regarder {opponent.name} continuer.</span>}
         </div>
       )}
-      <RoomCeremony
-        room={room}
-        title="Mosswing Online"
-        countdown={countdown}
-        winnerSlot={room?.winnerSlot ?? null}
-      />
     </main>
   )
 }

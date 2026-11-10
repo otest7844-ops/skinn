@@ -3,7 +3,6 @@ import { ArrowLeft, Check, Clipboard, Users, Wifi, WifiOff } from 'lucide-react'
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import './ArcadeOnline.css'
-import RoomCeremony from './RoomCeremony'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
 import GameControlsGuide from './GameControlsGuide'
@@ -250,7 +249,7 @@ export default function ArenaRoom({
   const opponent = room?.players.find((player) => !player.you)
   const winnerSlot = room?.gameState?.match?.winner ?? room?.gameState?.winner ?? room?.winnerSlot ?? null
   const countdown = room?.countdownEndsAt
-    ? clock ? Math.max(1, Math.ceil((room.countdownEndsAt - clock) / 1000)) : 3
+    ? clock ? Math.max(1, Math.ceil((room.countdownEndsAt - clock) / 1000)) : 10
     : null
   const outcome = !room || room.phase !== 'finished'
     ? null
@@ -274,7 +273,6 @@ export default function ArenaRoom({
             ? perform('arena:room:rematch')
             : perform('arena:game:action', { type, ...data }),
         })}
-        <RoomCeremony room={room} title={title} countdown={null} winnerSlot={winnerSlot} />
       </section>
     )
   }
@@ -364,7 +362,6 @@ export default function ArenaRoom({
           {!connected && !feedback && <p className="arcade-feedback">Connexion au serveur…</p>}
         </main>
       </div>
-      <RoomCeremony room={room} title={title} countdown={countdown} winnerSlot={winnerSlot} />
     </div>
   )
 }

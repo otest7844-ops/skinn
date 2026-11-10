@@ -88,6 +88,7 @@
     ];
     const BOT = [null, { v: 560, e: 110 }, { v: 1100, e: 30 }];
     let mode = 0, botErr = 0, ball = { x: -20, y: 450, vx: 0, vy: 0 }, score = [0, 0], state = 'ready', prev = '', trail = [], hits = 0, serveT = 0, serveTo = 1, lastHit = -1, canHit = [true, true], toast = '', toastT = 0;
+    let onlineMode = false, onlinePaused = false, onlineSlot = 0, onlineFrom = null, onlineTo = null, onlineAt = 0, onlineLastInputAt = 0, onlineLastTarget = null;
     const ov = document.getElementById('ov'), msg = document.getElementById('msg'), menu = document.getElementById('menu'), pm = document.getElementById('pm'), pb = document.getElementById('pause');
     function upd() {
       document.getElementById('sr').innerHTML = `${score[0]}<i>/${GOAL}</i>`;
@@ -133,6 +134,7 @@
       button.onclick = () => newGame(Number(button.dataset.m));
     });
     pb.onclick = () => {
+      if (onlineMode) return;
       if (state === 'play' || state === 'serve') {
         prev = state;
         state = 'pause';
@@ -154,10 +156,23 @@
     };
     const ptrs = {};
     const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+    function sendOnlineMove(player, force = false) {
+      if (!onlineMode) return;
+      const now = performance.now();
+      const target = { x: player.tx, y: player.ty };
+      if (!force && now - onlineLastInputAt < 33 && onlineLastTarget
+        && Math.hypot(target.x - onlineLastTarget.x, target.y - onlineLastTarget.y) < 3) return;
+      onlineLastInputAt = now;
+      onlineLastTarget = target;
+      parent.postMessage({ type: 'ping-pong:input', input: { type: 'move', ...target } }, location.origin);
+    }
     cv.addEventListener('pointerdown', (event) => {
-      const player = mode ? 1 : (landscape ? event.clientX < innerWidth / 2 : event.clientY < innerHeight / 2) ? 0 : 1;
+      const player = onlineMode
+        ? onlineSlot
+        : mode ? 1 : (landscape ? event.clientX < innerWidth / 2 : event.clientY < innerHeight / 2) ? 0 : 1;
       ptrs[event.pointerId] = { player, sx: event.clientX, sy: event.clientY, rx: rk[player].tx, ry: rk[player].ty };
       cv.setPointerCapture(event.pointerId);
+      if (onlineMode) sendOnlineMove(rk[player], true);
     });
     cv.addEventListener('pointermove', (event) => {
       const origin = ptrs[event.pointerId];
@@ -166,6 +181,7 @@
       const dx = (event.clientX - origin.sx) / s, dy = (event.clientY - origin.sy) / s;
       player.tx = cl(origin.rx + (landscape ? -dy : dx) * 1.5, limits.x0, limits.x1);
       player.ty = cl(origin.ry + (landscape ? dx : dy) * 1.5, limits.y0, limits.y1);
+      sendOnlineMove(player);
     });
     const end = (event) => { delete ptrs[event.pointerId]; };
     cv.addEventListener('pointerup', end);
@@ -341,11 +357,80 @@
         ctx.fillText(toast, 0, -250);
       }
     }
+    function onlineApply(snapshot) {
+      if (!onlineMode || !snapshot || !Array.isArray(snapshot.players) || snapshot.players.length !== 2) return;
+      onlineFrom = onlineTo || snapshot;
+      onlineTo = {
+        ...snapshot,
+        ball: { ...snapshot.ball },
+        players: snapshot.players.map((player) => ({ ...player })),
+      };
+      onlineAt = performance.now();
+      score = [...snapshot.score];
+      upd();
+      state = snapshot.state;
+      hits = snapshot.hits || 0;
+      serveTo = snapshot.serveTo;
+    }
+    function onlineInterpolate(now) {
+      if (!onlineMode || !onlineTo) return;
+      const amount = cl((now - onlineAt) / 65, 0, 1);
+      for (const field of ['x', 'y', 'vx', 'vy']) {
+        const from = onlineFrom.ball[field];
+        const to = onlineTo.ball[field];
+        ball[field] = from + (to - from) * amount;
+      }
+      onlineTo.players.forEach((source, slot) => {
+        const from = onlineFrom.players[slot];
+        const player = rk[slot];
+        player.x = from.x + (source.x - from.x) * amount;
+        player.y = from.y + (source.y - from.y) * amount;
+        player.vx = from.vx + (source.vx - from.vx) * amount;
+        player.vy = from.vy + (source.vy - from.vy) * amount;
+        player.tx = source.targetX;
+        player.ty = source.targetY;
+      });
+    }
+    window.addEventListener('message', (event) => {
+      if (event.source !== parent || event.origin !== location.origin || !event.data) return;
+      const data = event.data;
+      if (data.type === 'ping-pong:enable' && (data.slot === 0 || data.slot === 1)) {
+        onlineMode = true;
+        onlinePaused = false;
+        onlineSlot = data.slot;
+        mode = 0;
+        onlineFrom = null;
+        onlineTo = null;
+        onlineLastTarget = null;
+        score = [0, 0];
+        upd();
+        state = 'serve';
+        trail = [];
+        ov.classList.add('h');
+        pb.classList.remove('on');
+        parent.postMessage({ type: 'ping-pong:ready' }, location.origin);
+      } else if (data.type === 'ping-pong:pause') {
+        onlinePaused = true;
+      } else if (data.type === 'ping-pong:resume') {
+        onlinePaused = false;
+      } else if (data.type === 'ping-pong:state') {
+        onlineApply(data.state);
+      }
+    });
+
     let last = performance.now();
     function loop(time) {
       const dt = Math.min(.05, (time - last) / 1000);
       last = time;
-      if (dt > 0) {
+      if (onlineMode) {
+        if (!onlinePaused) onlineInterpolate(time);
+        if (!onlinePaused && state === 'play') {
+          trail.push({ x: ball.x, y: ball.y });
+          if (trail.length > 28) trail.shift();
+        } else {
+          trail = [];
+        }
+      } else if (dt > 0) {
         const steps = Math.max(1, Math.ceil(dt * 120));
         for (let i = 0; i < steps; i++) step(dt / steps);
       }

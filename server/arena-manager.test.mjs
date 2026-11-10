@@ -66,7 +66,8 @@ test('creates and joins rooms for every supported arena game, including public C
   const games = [
     'tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush',
     'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'forest-bridge', 'damned-maze', 'princess-race',
-    'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs',
+    'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade',
+    'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes',
   ]
   for (const game of games) {
     const host = await connect()
@@ -91,6 +92,90 @@ test('creates and joins rooms for every supported arena game, including public C
     assert.equal(joined.ok, true, `${game} room join`)
     assert.equal((await waitingForGuest).yourSlot, 1)
   }
+})
+
+test('runs Moto Taxi controls through the server and relays the opponent input', async (context) => {
+  const { server, first, second, created } = await setup(context, 'moto-taxi-afrique', 15)
+  const started = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await started
+  const remoteInput = waitFor(second, 'arena:remote-input', (message) => message.slot === 0)
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { action: 'gas', pressed: true },
+  })).ok, true)
+  assert.deepEqual((await remoteInput).input, { action: 'gas', pressed: true })
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  const state = server.arenaRooms.get(created.code).gameState
+  assert.equal(state.players[0].distance, 0)
+  state.phase = 'racing'
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  assert.ok(state.players[0].distance > 0)
+  assert.equal(state.players[0].input.gas, true)
+})
+
+test('runs Chemin de couleurs with hidden input path and server-checked tiles', async (context) => {
+  const { server, first, second, created } = await setup(context, 'chemin-de-couleurs', 15)
+  const started = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await started
+  const room = server.arenaRooms.get(created.code)
+  const sequence = [...room.gameState.path]
+  room.gameState.phase = 'input'
+  room.gameState.phaseEndsAt = null
+  room.gameState.inputDeadline = Date.now() + 10_000
+  const updated = Promise.all([
+    waitFor(first, 'arena:state', (state) => state.phase === 'running' && state.gameState.progress[0] === 1),
+    waitFor(second, 'arena:state', (state) => state.phase === 'running' && state.gameState.progress[0] === 1),
+  ])
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { type: 'tile', tile: sequence[0] },
+  })).ok, true)
+  const [hostState, guestState] = await updated
+  assert.equal(hostState.gameState.path, undefined)
+  assert.equal(guestState.gameState.path, undefined)
+  assert.equal(guestState.gameState.progress[0], 1)
+  assert.equal((await emitAck(second, 'arena:input', {
+    input: { type: 'tile', tile: (sequence[0] + 1) % 25 },
+  })).ok, true)
+  assert.equal(room.gameState.failed[1], true)
+})
+
+test('runs Duel de cartes with private hands, alternating turns and a timed reveal', async (context) => {
+  const { server, first, second, created } = await setup(context, 'duel-de-cartes', 15)
+  const started = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await started
+  const room = server.arenaRooms.get(created.code)
+  assert.ok(room.gameState.hands[0].every(Number.isInteger))
+  const privateFirst = waitFor(first, 'arena:state', (state) => state.phase === 'running' && state.gameState.turn === 1)
+  const privateSecond = waitFor(second, 'arena:state', (state) => state.phase === 'running' && state.gameState.turn === 1)
+  const firstCard = room.gameState.hands[0][0]
+  assert.equal((await emitAck(first, 'arena:input', {
+    input: { type: 'play-card', card: firstCard },
+  })).ok, true)
+  const [firstView, secondView] = await Promise.all([privateFirst, privateSecond])
+  assert.equal(firstView.gameState.hands[1].every((card) => card === null), true)
+  assert.equal(secondView.gameState.hands[0].every((card) => card === null), true)
+  assert.equal(firstView.gameState.played[0], null)
+  const secondCard = room.gameState.hands[1][0]
+  const reveal = waitFor(first, 'arena:state', (state) => state.phase === 'running' && state.gameState.phase === 'reveal')
+  assert.equal((await emitAck(second, 'arena:input', {
+    input: { type: 'play-card', card: secondCard },
+  })).ok, true)
+  assert.deepEqual((await reveal).gameState.played, [firstCard, secondCard])
+  const nextRound = waitFor(first, 'arena:state', (state) => state.phase === 'running' && state.gameState.round === 2)
+  room.gameState.revealEndsAt = Date.now()
+  await nextRound
+  assert.equal(room.gameState.phase, 'play')
 })
 
 test('runs Chasse aux mots in a shared two-player room and scores validated selections', async (context) => {
@@ -667,7 +752,7 @@ test('validates Tic-Tac-Toe turns and synchronizes the winning board', async (co
   assert.deepEqual(result.gameState.scores, [1, 0])
 })
 
-test('shares the server-generated Memory board and enforces alternating turns', async (context) => {
+test('shares the server-generated Memory board and allows both players to play simultaneously', async (context) => {
   const { first, second } = await setup(context, 'memo-5x5')
   const started = Promise.all([
     waitFor(first, 'arena:state', (state) => state.phase === 'running'),
@@ -686,17 +771,24 @@ test('shares the server-generated Memory board and enforces alternating turns', 
   for (const card of firstState.gameState.cards.filter((item) => !item.isStar)) {
     matchingIds.set(card.symbol, [...(matchingIds.get(card.symbol) ?? []), card.id])
   }
-  const pair = [...matchingIds.values()][0]
-  const revealedBySecond = waitFor(second, 'arena:state', (state) => state.gameState.opened.length === 1)
-  assert.equal((await emitAck(first, 'arena:game:action', { type: 'memory-flip', cardId: pair[0] })).ok, true)
-  assert.equal((await revealedBySecond).gameState.cards[pair[0]].faceUp, true)
-  assert.equal((await emitAck(second, 'arena:game:action', { type: 'memory-flip', cardId: pair[1] })).ok, false)
+  const [firstPair, secondPair] = [...matchingIds.values()]
+  const firstView = waitFor(first, 'arena:state', (state) => state.gameState.opened.length === 1)
+  const secondView = waitFor(second, 'arena:state', (state) => state.gameState.opened.length === 1)
+  assert.equal((await emitAck(first, 'arena:game:action', { type: 'memory-flip', cardId: firstPair[0] })).ok, true)
+  assert.equal((await emitAck(second, 'arena:game:action', { type: 'memory-flip', cardId: secondPair[0] })).ok, true)
+  const [firstOpened, secondOpened] = await Promise.all([firstView, secondView])
+  assert.equal(firstOpened.gameState.cards[firstPair[0]].faceUp, true)
+  assert.equal(firstOpened.gameState.cards[secondPair[0]].faceUp, false)
+  assert.equal(secondOpened.gameState.cards[secondPair[0]].faceUp, true)
+  assert.equal(secondOpened.gameState.cards[firstPair[0]].faceUp, false)
 
-  const matchedBySecond = waitFor(second, 'arena:state', (state) => state.gameState.scores[0] === 1)
-  assert.equal((await emitAck(first, 'arena:game:action', { type: 'memory-flip', cardId: pair[1] })).ok, true)
-  const result = await matchedBySecond
-  assert.equal(result.gameState.turn, 0)
-  assert.ok(result.gameState.cards[pair[0]].matched && result.gameState.cards[pair[1]].matched)
+  const firstMatched = waitFor(first, 'arena:state', (state) => state.gameState.scores[0] === 1)
+  const secondMatched = waitFor(second, 'arena:state', (state) => state.gameState.scores[1] === 1)
+  assert.equal((await emitAck(first, 'arena:game:action', { type: 'memory-flip', cardId: firstPair[1] })).ok, true)
+  assert.equal((await emitAck(second, 'arena:game:action', { type: 'memory-flip', cardId: secondPair[1] })).ok, true)
+  const [firstResult, secondResult] = await Promise.all([firstMatched, secondMatched])
+  assert.ok(firstResult.gameState.cards[firstPair[0]].matched && firstResult.gameState.cards[firstPair[1]].matched)
+  assert.ok(secondResult.gameState.cards[secondPair[0]].matched && secondResult.gameState.cards[secondPair[1]].matched)
 })
 
 test('lists public rooms, requires equal demo stakes, and pays the winner from the server escrow', async (context) => {
@@ -843,6 +935,19 @@ test('publishes a client-clock-independent countdown duration', async (context) 
   }
 })
 
+test('starts Forest Bridge quickly even when the multiplayer countdown is ten seconds', async (context) => {
+  const { first, second } = await setup(context, 'forest-bridge', 10_000)
+  const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const secondStarted = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+  const readyAt = Date.now()
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await Promise.all([firstStarted, secondStarted])
+  assert.ok(Date.now() - readyAt < 1500)
+})
+
 test('runs Ping-Pong from server state and rejects client-published physics', async (context) => {
   const { first, second } = await setup(context, 'ping-pong')
   const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
@@ -856,11 +961,11 @@ test('runs Ping-Pong from server state and rejects client-published physics', as
   assert.equal((await emitAck(first, 'arena:state', { state: { ball: { x: 1 } } })).ok, false)
   assert.equal((await emitAck(second, 'arena:input', { input: { type: 'serve' } })).ok, false)
 
-  const moved = waitFor(second, 'arena:state', (state) => state.gameState?.players?.[1]?.targetX === 0.3)
-  assert.equal((await emitAck(second, 'arena:input', { input: { type: 'move', x: 0.3, y: 2.8 } })).ok, true)
-  assert.equal((await moved).gameState.players[1].targetX, 0.3)
+  const moved = waitFor(second, 'arena:state', (state) => state.gameState?.players?.[1]?.targetX === 120)
+  assert.equal((await emitAck(second, 'arena:input', { input: { type: 'move', x: 120, y: 600 } })).ok, true)
+  assert.equal((await moved).gameState.players[1].targetX, 120)
+  assert.equal((await emitAck(first, 'arena:input', { input: { type: 'serve' } })).ok, false)
   const serving = waitFor(second, 'arena:state', (state) => state.gameState?.state === 'play')
-  assert.equal((await emitAck(first, 'arena:input', { input: { type: 'serve' } })).ok, true)
   assert.equal((await serving).gameState.state, 'play')
   assert.equal((await emitAck(first, 'arena:input', { input: { type: 'serve' } })).ok, false)
   assert.equal((await emitAck(second, 'arena:room:finish')).ok, false)
@@ -1018,15 +1123,108 @@ test('runs Canon Duel inputs from both assigned player slots on shared server st
     input: { type: 'fire', slot: 1 },
   })).ok, false)
 
-  const guestShot = waitFor(first, 'arena:state', (state) => state.gameState.bullets.length === 1)
-  assert.equal((await emitAck(second, 'arena:input', { input: { type: 'fire' } })).ok, true)
-  assert.deepEqual((await guestShot).gameState.bullets.map((bullet) => bullet.owner), [1])
-
-  const synchronized = waitFor(second, 'arena:state', (state) => state.gameState.bullets.length === 2)
+  const hostShot = waitFor(first, 'arena:state', (state) => state.gameState.bullets.length === 1)
+  const hostShotForGuest = waitFor(second, 'arena:state', (state) => state.gameState.bullets.length === 1)
   assert.equal((await emitAck(first, 'arena:input', { input: { type: 'fire' } })).ok, true)
-  const snapshot = await synchronized
-  assert.deepEqual(snapshot.gameState.bullets.map((bullet) => bullet.owner).sort(), [0, 1])
+  const [hostState, hostStateForGuest] = await Promise.all([hostShot, hostShotForGuest])
+  assert.deepEqual(hostState.gameState.bullets.map((bullet) => bullet.owner), [0])
+  assert.deepEqual(hostStateForGuest.gameState.bullets.map((bullet) => bullet.owner), [0])
+  assert.ok(hostState.gameState.bullets[0].y < 0.5)
+
+  const guestShot = waitFor(first, 'arena:state', (state) => state.gameState.bullets.some((bullet) => bullet.owner === 1))
+  const guestShotForGuest = waitFor(second, 'arena:state', (state) => state.gameState.bullets.some((bullet) => bullet.owner === 1))
+  assert.equal((await emitAck(second, 'arena:input', { input: { type: 'fire' } })).ok, true)
+  const [guestState, guestStateForGuest] = await Promise.all([guestShot, guestShotForGuest])
+  assert.ok(guestState.gameState.bullets.some((bullet) => bullet.owner === 1 && bullet.y > 0.5))
+  assert.ok(guestStateForGuest.gameState.bullets.some((bullet) => bullet.owner === 1 && bullet.y > 0.5))
+
   assert.equal((await emitAck(first, 'arena:state', {
     state: { status: 'finished', winner: 0 },
   })).ok, false)
+})
+
+test('runs the supplied 3D chess game with server-validated turns and synchronized captures', async (context) => {
+  const { first, second } = await setup(context, 'chess-3d')
+  const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const secondStarted = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const [firstState, secondState] = await Promise.all([firstStarted, secondStarted])
+  assert.equal(firstState.gameState.status, 'playing')
+  assert.equal(firstState.gameState.turn, 'w')
+  assert.deepEqual(secondState.gameState.board, firstState.gameState.board)
+
+  assert.equal((await emitAck(first, 'arena:input', { input: { from: 52, to: 36 } })).ok, true)
+  assert.equal((await emitAck(first, 'arena:input', { input: { from: 11, to: 27 } })).ok, false)
+  assert.equal((await emitAck(second, 'arena:input', { input: { from: 11, to: 27 } })).ok, true)
+  const capture = waitFor(second, 'arena:state', (state) => state.gameState.scores[0] === 1)
+  assert.equal((await emitAck(first, 'arena:input', { input: { from: 36, to: 27 } })).ok, true)
+  const state = await capture
+  assert.equal(state.gameState.board[27], 'wP')
+  assert.deepEqual(state.gameState.scores, [1, 0])
+  assert.equal(state.gameState.moves.length, 3)
+})
+
+test('resets the 3D chess board after a checkmate rematch', async (context) => {
+  const { first, second } = await setup(context, 'chess-3d')
+  const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const secondStarted = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await Promise.all([firstStarted, secondStarted])
+
+  assert.equal((await emitAck(first, 'arena:input', { input: { from: 53, to: 45 } })).ok, true)
+  assert.equal((await emitAck(second, 'arena:input', { input: { from: 12, to: 28 } })).ok, true)
+  assert.equal((await emitAck(first, 'arena:input', { input: { from: 54, to: 38 } })).ok, true)
+  const finished = waitFor(first, 'arena:state', (state) => state.phase === 'finished')
+  assert.equal((await emitAck(second, 'arena:input', { input: { from: 3, to: 39 } })).ok, true)
+  assert.equal((await finished).winnerSlot, 1)
+
+  const secondRound = waitFor(first, 'arena:state', (next) => next.phase === 'running' && next.round === 2)
+  await Promise.all([
+    emitAck(first, 'arena:room:rematch'),
+    emitAck(second, 'arena:room:rematch'),
+  ])
+  const restarted = await secondRound
+  assert.equal(restarted.gameState.turn, 'w')
+  assert.deepEqual(restarted.gameState.scores, [0, 0])
+  assert.equal(restarted.gameState.moves.length, 0)
+})
+
+test('runs Embuscade as a shared timed score duel and rejects impossible reports', async (context) => {
+  const { first, second } = await setup(context, 'embuscade')
+  const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const secondStarted = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await Promise.all([firstStarted, secondStarted])
+
+  assert.equal((await emitAck(first, 'arena:state', {
+    state: { score: 400, kills: 1, finished: false },
+  })).ok, false)
+  assert.equal((await emitAck(first, 'arena:state', {
+    state: { score: 300, kills: 1, finished: true },
+  })).ok, true)
+  const finished = waitFor(first, 'arena:state', (state) => state.phase === 'finished')
+  assert.equal((await emitAck(second, 'arena:state', {
+    state: { score: 100, kills: 1, finished: true },
+  })).ok, true)
+  const finalState = await finished
+  assert.deepEqual(finalState.gameState.scores, [300, 100])
+  assert.equal(finalState.winnerSlot, 0)
+
+  const secondRound = waitFor(second, 'arena:state', (state) => state.phase === 'running' && state.round === 2)
+  await Promise.all([
+    emitAck(first, 'arena:room:rematch'),
+    emitAck(second, 'arena:room:rematch'),
+  ])
+  const restarted = await secondRound
+  assert.deepEqual(restarted.gameState.scores, [0, 0])
+  assert.equal(restarted.gameState.remainingMs, 75_000)
 })

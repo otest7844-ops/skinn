@@ -15,7 +15,6 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  Play,
   Plus,
   Search,
   Sparkles,
@@ -154,13 +153,6 @@ const allGames = [
     arcadeGameId: 'ping-pong' as ArcadeGameId,
   },
   {
-    id: 'cannon-duel',
-    title: 'Canon Duel',
-    image: '/images/cannon-duel.jpg',
-    type: 'arcade' as const,
-    arcadeGameId: 'cannon-duel' as ArcadeGameId,
-  },
-  {
     id: 'ball-rush-3d',
     title: 'Ball Rush 3D',
     image: '/images/game-ball-rush.jpg',
@@ -221,6 +213,41 @@ const allGames = [
     image: '/images/duel-de-troncs.jpg',
     type: 'arcade' as const,
     arcadeGameId: 'duel-de-troncs' as ArcadeGameId,
+  },
+  {
+    id: 'chess-3d',
+    title: 'Échecs 3D',
+    image: '/images/game-stone.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'chess-3d' as ArcadeGameId,
+  },
+  {
+    id: 'embuscade',
+    title: 'Embuscade',
+    image: '/images/game-western.svg',
+    type: 'arcade' as const,
+    arcadeGameId: 'embuscade' as ArcadeGameId,
+  },
+  {
+    id: 'moto-taxi-afrique',
+    title: 'Moto Taxi Afrique',
+    image: '/images/moto-taxi-afrique.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'moto-taxi-afrique' as ArcadeGameId,
+  },
+  {
+    id: 'chemin-de-couleurs',
+    title: 'Chemin de couleurs 3D',
+    image: '/images/chemin-de-couleurs.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'chemin-de-couleurs' as ArcadeGameId,
+  },
+  {
+    id: 'duel-de-cartes',
+    title: 'Duel de cartes 3D',
+    image: '/images/duel-de-cartes.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'duel-de-cartes' as ArcadeGameId,
   },
 ]
 
@@ -426,7 +453,7 @@ export default function App() {
     setPublicRoomJoin(room)
     if (room.game === 'tic-tac-toe') {
       setActiveArcadeGame('tic-tac-toe')
-    } else if (['ping-pong', 'basketball-stars', 'ball-rush', 'cannon-duel', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs'].includes(room.game)) {
+    } else if (['ping-pong', 'basketball-stars', 'ball-rush', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade', 'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes'].includes(room.game)) {
       setActiveArcadeGame(room.game as ArcadeGameId)
     } else if (room.game === 'football-19') {
       setActiveFootball19(true)
@@ -998,36 +1025,35 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Unique playable games */}
-              <div
-                className="desktop-games-grid flex items-stretch gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 select-none"
-                onWheel={(event) => {
-                  if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
-                }}
-              >
-                {allGames.map((game) => (
-                  <button
-                    type="button"
-                    key={game.id}
-                    onClick={() => handleLaunchGame(game)}
-                    aria-label={`Lancer ${game.title}`}
-                    className="game-category-tile"
-                  >
-                    <img
-                      {...getResponsiveImageProps(game.image, '120px', [64, 128, 320, 400, 640])}
-                      alt=""
-                      className="sports-category-image"
-                      width={120}
-                      height={198}
-                      loading="lazy"
-                      decoding="async"
-                      onError={hideBrokenImage}
-                    />
-                    <span className="sports-category-label">{game.title}</span>
-                    <span className="sports-category-status">Jeu disponible</span>
-                  </button>
-                ))}
-              </div>
+              {Array.from({ length: Math.ceil(allGames.length / 5) }, (_, groupIndex) => allGames.slice(groupIndex * 5, (groupIndex + 1) * 5)).map((games, groupIndex) => (
+                <div key={groupIndex} className="home-games-group">
+                  <h3 className="home-games-group-title">Jeux {groupIndex * 5 + 1} à {groupIndex * 5 + games.length}</h3>
+                  <div className="home-games-row">
+                    {games.map((game) => (
+                      <button
+                        type="button"
+                        key={game.id}
+                        onClick={() => handleLaunchGame(game)}
+                        aria-label={`Lancer ${game.title}`}
+                        className="game-category-tile"
+                      >
+                        <img
+                          {...getResponsiveImageProps(game.image, '120px', [64, 128, 320, 400, 640])}
+                          alt=""
+                          className="sports-category-image"
+                          width={120}
+                          height={198}
+                          loading="lazy"
+                          decoding="async"
+                          onError={hideBrokenImage}
+                        />
+                        <span className="sports-category-label">{game.title}</span>
+                        <span className="sports-category-status">Jeu disponible</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </section>
 
             <PublicRooms onJoin={joinPublicRoom} onWalletBalance={updateDemoBalance} />
@@ -1048,40 +1074,33 @@ export default function App() {
             </div>
             <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Tous les jeux</h1>
             <div
-              className="desktop-games-catalog no-scrollbar grid grid-cols-2 gap-3 sm:grid-cols-3"
-              onWheel={(event) => {
-                if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
-              }}
+              className="desktop-games-catalog no-scrollbar flex flex-col gap-4"
             >
-              {allGames.map((game) => (
-                <article
-                  key={game.id}
-                  className={`rounded-2xl p-2 ${
-                    isDark ? 'bg-[#161928] border border-white/5'
-                      : 'bg-white border border-slate-100 shadow-sm'
-                  }`}
-                >
-                  <img
-                    {...getResponsiveImageProps(game.image, '(min-width: 640px) 33vw, 50vw')}
-                    alt={game.title}
-                    className="h-28 w-full rounded-xl bg-slate-900/10 object-cover"
-                    width={320}
-                    height={112}
-                    loading="lazy"
-                    decoding="async"
-                    onError={hideBrokenImage}
-                  />
-                  <h2 className={`mt-2 truncate text-center text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {game.title}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => handleLaunchGame(game)}
-                    className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-[#6B38FB] py-2 text-xs font-bold text-white"
-                  >
-                    Jouer <Play size={11} fill="currentColor" />
-                  </button>
-                </article>
+              {Array.from({ length: Math.ceil(allGames.length / 5) }, (_, groupIndex) => allGames.slice(groupIndex * 5, (groupIndex + 1) * 5)).map((games, groupIndex) => (
+                <div key={groupIndex} className="home-games-row">
+                  {games.map((game) => (
+                    <button
+                      type="button"
+                      key={game.id}
+                      onClick={() => handleLaunchGame(game)}
+                      aria-label={`Lancer ${game.title}`}
+                      className="game-category-tile"
+                    >
+                      <img
+                        {...getResponsiveImageProps(game.image, '152px', [64, 128, 320, 400, 640])}
+                        alt=""
+                        className="sports-category-image"
+                        width={152}
+                        height={208}
+                        loading="lazy"
+                        decoding="async"
+                        onError={hideBrokenImage}
+                      />
+                      <span className="sports-category-label">{game.title}</span>
+                      <span className="sports-category-status">Jeu disponible</span>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </div>

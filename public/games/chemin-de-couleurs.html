@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chemin de couleurs 3D</title>
+<style>
+:root{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#0d0d12;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#f0eee8}
+canvas{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#ui{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 12px) 12px 0;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;z-index:2}
+h1{margin:0;font-size:1.25rem;text-shadow:0 2px 8px #000}
+.stats{display:flex;gap:10px}
+.stat{background:rgba(255,255,255,.08);backdrop-filter:blur(6px);border-radius:12px;padding:6px 14px;text-align:center;min-width:76px}
+.stat b{display:block;font-size:1.2rem}
+.stat span{font-size:.68rem;opacity:.7;text-transform:uppercase;letter-spacing:.05em}
+#msg{font-weight:600;text-align:center;text-shadow:0 2px 8px #000;min-height:1.5em}
+#bar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:0 12px calc(env(safe-area-inset-bottom,0px) + 22px);z-index:2}
+button{pointer-events:auto;padding:13px 32px;font-size:1rem;font-weight:700;border:0;border-radius:999px;background:#2f8bff;color:#fff;cursor:pointer;box-shadow:0 6px 24px rgba(47,139,255,.5)}
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>Chemin de couleurs 3D</h1>
+  <div class="stats">
+    <div class="stat"><b id="lvl">1</b><span>Niveau</span></div>
+    <div class="stat"><b id="len">3</b><span>Cases</span></div>
+    <div class="stat"><b id="best">0</b><span>Record</span></div>
+  </div>
+  <div id="msg">Mémorise l’ordre des cases !</div>
+</div>
+<div id="bar"><button id="go">Jouer</button></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const N=5, GAP=.12, HARD_FROM=6;
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+renderer.outputEncoding=THREE.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0d0d12);scene.fog=new THREE.Fog(0x0d0d12,12,30);
+const camera=new THREE.PerspectiveCamera(40,1,.1,100);
+let camD=10;
+function fit(){
+  const w=innerWidth,h=innerHeight,a=w/h;
+  renderer.setSize(w,h);camera.aspect=a;camera.updateProjectionMatrix();
+  camD=Math.max(10,9.2/a);scene.fog.near=camD+3;scene.fog.far=camD+18;
+}
+addEventListener("resize",fit);fit();
+
+// Lumières
+scene.add(new THREE.HemisphereLight(0xbfd4ff,0x221a14,.55));
+const sun=new THREE.DirectionalLight(0xfff1dd,1.7);
+sun.position.set(4,10,5);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:1,far:25});sun.shadow.bias=-.0005;
+scene.add(sun);
+const rim=new THREE.DirectionalLight(0x4466ff,.5);rim.position.set(-5,4,-6);scene.add(rim);
+const glowL=new THREE.PointLight(0x2f8bff,0,5);glowL.position.y=1.2;scene.add(glowL);
+let gI=0;
+
+// Textures procédurales (marbre)
+function mkTex(base,vein,rep){
+  const s=256,c=document.createElement("canvas");c.width=c.height=s;const g=c.getContext("2d");
+  g.fillStyle=base;g.fillRect(0,0,s,s);
+  for(let i=0;i<3500;i++){g.fillStyle=Math.random()<.5?`rgba(255,255,255,${Math.random()*.06})`:`rgba(0,0,0,${Math.random()*.08})`;g.fillRect(Math.random()*s,Math.random()*s,1+Math.random()*2,1+Math.random()*2)}
+  g.strokeStyle=vein;
+  for(let i=0;i<6;i++){g.globalAlpha=.15+Math.random()*.25;g.lineWidth=.6+Math.random()*1.6;g.beginPath();g.moveTo(Math.random()*s,0);g.bezierCurveTo(Math.random()*s,s*.3,Math.random()*s,s*.6,Math.random()*s,s);g.stroke()}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rep,rep);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;return t;
+}
+const texs=[mkTex("#7d838f","#2a2d35",1),mkTex("#868b96","#3a3d46",1),mkTex("#767c88","#22252c",1)];
+
+// Sol et socle
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.MeshStandardMaterial({map:mkTex("#1b1b22","#000",14),roughness:.85,metalness:.1}));
+floor.rotation.x=-Math.PI/2;floor.position.y=-.42;floor.receiveShadow=true;scene.add(floor);
+const slab=new THREE.Mesh(new THREE.BoxGeometry(6.5,.34,6.5),new THREE.MeshStandardMaterial({color:0x15161b,roughness:.35,metalness:.8}));
+slab.position.y=-.25;slab.castShadow=slab.receiveShadow=true;scene.add(slab);
+
+// Dalles
+const BLUE=new THREE.Color(0x2f8bff).multiplyScalar(1.3), RED=new THREE.Color(0xff2b2b).multiplyScalar(1.3), OFF=new THREE.Color(0);
+const tiles=[],tg=new THREE.BoxGeometry(1,.3,1);
+function mkNum(){
+  const c=document.createElement("canvas");c.width=c.height=128;const t=new THREE.CanvasTexture(c);
+  const p=new THREE.Mesh(new THREE.PlaneGeometry(.7,.7),new THREE.MeshBasicMaterial({map:t,transparent:true}));
+  p.rotation.x=-Math.PI/2;p.position.y=.16;p.visible=false;p.userData={c,t};return p;
+}
+for(let i=0;i<N*N;i++){
+  const m=new THREE.MeshStandardMaterial({color:0xffffff,map:texs[i%3],bumpMap:texs[i%3],bumpScale:.6,roughness:.3,metalness:.2,emissive:0x000000});
+  const t=new THREE.Mesh(tg,m);
+  t.position.set((i%N-2)*(1+GAP),0,(Math.floor(i/N)-2)*(1+GAP));
+  t.castShadow=t.receiveShadow=true;t.userData={ty:0,tc:OFF,num:mkNum()};t.add(t.userData.num);
+  scene.add(t);tiles.push(t);
+}
+function setT(i,y,c){tiles[i].userData.ty=y;tiles[i].userData.tc=c}
+function setNum(i,n){
+  const p=tiles[i].userData.num,g=p.userData.c.getContext("2d");g.clearRect(0,0,128,128);
+  if(n){g.fillStyle="#fff";g.font="bold 72px system-ui";g.textAlign="center";g.textBaseline="middle";g.fillText(n,64,68)}
+  p.userData.t.needsUpdate=true;p.visible=!!n;
+}
+function lightOn(i,c,v){glowL.position.x=tiles[i].position.x;glowL.position.z=tiles[i].position.z;glowL.color.copy(c);gI=v}
+
+// Son
+let ac=null;
+function beep(f,d=.18,type="sine",v=.12){
+  try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+  const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.value=f;
+  g.gain.setValueAtTime(v,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);
+  o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}
+}
+
+// Rendu
+let mx=0,T=0,shake=0;
+addEventListener("pointermove",e=>{mx=(e.clientX/innerWidth-.5)*2});
+function loop(){
+  requestAnimationFrame(loop);T+=.01;
+  for(const t of tiles){const u=t.userData;t.position.y+=(u.ty-t.position.y)*.2;t.material.emissive.lerp(u.tc,.18)}
+  glowL.intensity+=(gI-glowL.intensity)*.2;
+  const sx=(mx*.9+Math.sin(T)*.25)+(shake>0?(Math.random()-.5)*shake:0);if(shake>0)shake-=.02;
+  camera.position.set(sx,camD*.82,camD*.57);camera.lookAt(0,0,0);
+  renderer.render(scene,camera);
+}
+loop();
+
+// Jeu
+const msg=document.getElementById("msg"),go=document.getElementById("go");
+const lvlEl=document.getElementById("lvl"),lenEl=document.getElementById("len"),bestEl=document.getElementById("best");
+let path=[],step=0,level=1,state="idle",best=0;
+try{best=parseInt(localStorage.getItem("cdc3d-best")||"0",10)||0}catch(e){}
+bestEl.textContent=best;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function makePath(len){
+  for(let t=0;t<200;t++){
+    const p=[Math.floor(Math.random()*N*N)];
+    while(p.length<len){
+      const c=p[p.length-1],x=c%N,y=Math.floor(c/N),o=[];
+      if(x>0)o.push(c-1);if(x<N-1)o.push(c+1);if(y>0)o.push(c-N);if(y<N-1)o.push(c+N);
+      const f=o.filter(q=>!p.includes(q));if(!f.length)break;p.push(f[Math.floor(Math.random()*f.length)]);
+    }
+    if(p.length===len)return p;
+  }
+  return null;
+}
+function makeScatter(len){
+  const a=[...Array(N*N).keys()];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
+  return a.slice(0,len);
+}
+function reset(){tiles.forEach((_,i)=>{setT(i,0,OFF);setNum(i,0)});gI=0}
+async function play(){
+  state="showing";go.style.display="none";reset();
+  const len=Math.min(N*N,level+2),hard=level>=HARD_FROM;
+  lvlEl.textContent=level;lenEl.textContent=len;
+  path=hard?makeScatter(len):makePath(len);
+  msg.textContent=hard?"Niveau difficile : cases éparpillées !":"Regarde bien…";await sleep(1000);
+  const speed=Math.max(380,700-level*25);
+  for(let i=0;i<path.length;i++){
+    setT(path[i],.12,BLUE);lightOn(path[i],BLUE,3.5);beep(300+i*35);
+    await sleep(speed);setT(path[i],0,OFF);gI=0;await sleep(160);
+  }
+  state="input";step=0;msg.textContent="À toi ! Touche les cases dans l’ordre.";
+}
+async function tap(i){
+  if(state!=="input")return;
+  if(i===path[step]){
+    setT(i,-.05,BLUE);setNum(i,step+1);lightOn(i,BLUE,2);beep(300+step*35,.15);step++;
+    setTimeout(()=>{if(state==="input")gI=0},250);
+    if(step===path.length){
+      state="done";msg.textContent="Bravo ! Niveau suivant…";level++;
+      [523,659,784].forEach((f,k)=>setTimeout(()=>beep(f,.25,"triangle"),k*120));
+      await sleep(1300);play();
+    }
+  }else{
+    state="over";shake=.5;setT(i,-.05,RED);lightOn(i,RED,4);beep(120,.5,"sawtooth",.15);
+    const score=level-1;
+    if(score>best){best=score;bestEl.textContent=best;try{localStorage.setItem("cdc3d-best",String(best))}catch(e){}}
+    msg.textContent="Raté ! Voici le bon chemin…";await sleep(900);gI=0;
+    for(let k=0;k<path.length;k++){setT(path[k],0,BLUE);setNum(path[k],k+1);await sleep(200)}
+    msg.textContent="Perdu au niveau "+level+" · score "+score;
+    go.textContent="Rejouer";go.style.display="";
+  }
+}
+const ray=new THREE.Raycaster(),v2=new THREE.Vector2();
+renderer.domElement.addEventListener("pointerdown",e=>{
+  v2.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);
+  ray.setFromCamera(v2,camera);
+  const h=ray.intersectObjects(tiles,false)[0];
+  if(h)tap(tiles.indexOf(h.object));
+});
+go.onclick=()=>{level=1;play()};
+</script>
+</body>
+</html>
