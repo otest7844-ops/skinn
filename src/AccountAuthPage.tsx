@@ -102,8 +102,26 @@ function getDeviceToken() {
 }
 
 async function getApiError(response: Response) {
+  if (!response.headers.get('content-type')?.includes('application/json')) {
+    return { error: `Service de connexion indisponible (HTTP ${response.status}).` }
+  }
   const result = await response.json() as ApiResult
   return result
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit) {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 10000)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Le serveur de connexion ne répond pas. Réessayez plus tard.')
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
+  }
 }
 
 export default function AccountAuthPage({
@@ -146,10 +164,13 @@ export default function AccountAuthPage({
   }, [])
 
   const requestChallenge = useCallback(async () => {
-      const response = await fetch(`${getAuthApiBaseUrl()}/api/auth/captcha`, { credentials: 'include', cache: 'no-store' })
+      const response = await fetchWithTimeout(`${getAuthApiBaseUrl()}/api/auth/captcha`, { credentials: 'include', cache: 'no-store' })
       if (!response.ok) {
         const result = await getApiError(response)
         throw new Error(result.error ?? 'Impossible de charger la vérification.')
+      }
+      if (!response.headers.get('content-type')?.includes('application/json')) {
+        throw new Error('Service de connexion indisponible. Le serveur d’authentification doit être déployé.')
       }
       return response.json() as Promise<Challenge>
   }, [])
@@ -223,12 +244,15 @@ export default function AccountAuthPage({
             acceptances: { contract: acceptances[0], rules: acceptances[1], financial: acceptances[2], terms: acceptances[3] },
           }
         : { challengeId: challenge.challengeId, captchaAnswer, id, password, deviceType, deviceToken }
-      const response = await fetch(`${getAuthApiBaseUrl()}/api/auth/${activeMode}`, {
+      const response = await fetchWithTimeout(`${getAuthApiBaseUrl()}/api/auth/${activeMode}`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      if (!response.headers.get('content-type')?.includes('application/json')) {
+        throw new Error('Service de connexion indisponible. Le serveur d’authentification doit être déployé.')
+      }
       const result = await response.json() as ApiResult
       if (!response.ok) throw new Error(result.error ?? 'La demande a échoué.')
       if (!result.account) throw new Error('Le serveur n’a pas confirmé le compte.')

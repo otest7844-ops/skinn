@@ -500,6 +500,8 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController()
+    let active = true
+    const timeout = window.setTimeout(() => controller.abort(), 8000)
     fetch(`${getAuthApiBaseUrl()}/api/auth/me`, {
       credentials: 'include',
       cache: 'no-store',
@@ -510,10 +512,16 @@ export default function App() {
       const result = await response.json() as { account: ChicagoAccount }
       return result.account
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) console.warn('Unable to restore the Chicago account session:', error)
+      if (active && !controller.signal.aborted) {
+        console.warn('Unable to restore the Chicago account session:', error)
+      }
+      if (active) {
+        setAuthMode('login')
+      }
       return null
     }).then((restoredAccount) => {
-      if (controller.signal.aborted) return
+      if (!active) return
+      window.clearTimeout(timeout)
       if (restoredAccount) {
         setAccount(restoredAccount)
         setAuthMode(null)
@@ -521,7 +529,11 @@ export default function App() {
       }
       setAuthReady(true)
     })
-    return () => controller.abort()
+    return () => {
+      active = false
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
   }, [])
 
   useEffect(() => {

@@ -6,5 +6,6 @@ export function getMultiplayerUrl() {
 }
 
 export function getAuthApiBaseUrl() {
-  return import.meta.env.DEV ? '' : getMultiplayerUrl()
+  if (import.meta.env.DEV) return ''
+  return import.meta.env.VITE_MULTIPLAYER_URL?.trim() ? getMultiplayerUrl() : window.location.origin
 }
