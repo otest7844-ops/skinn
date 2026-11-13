@@ -32,7 +32,7 @@ body::-webkit-scrollbar {
 
 /* Base theme styling */
 body {
-  transition: background-color 0.25s ease, color 0.25s ease;
+  transition: background-color 180ms ease-out, color 180ms ease-out;
 }
 
 body[data-theme="dark"] {
@@ -220,6 +220,98 @@ body[data-theme="lime"] [class~="shadow-purple-600/30"] {
   animation: chicagoLoadingDot 600ms ease-in-out infinite alternate;
 }
 
+.chicago-ink-scene {
+  width: min(96vw, 900px);
+  height: auto;
+  overflow: visible;
+}
+
+.intro-ink-word {
+  fill-opacity: 0;
+  stroke-dasharray: 1450;
+  stroke-dashoffset: 1450;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: url(#intro-ink-glow);
+  animation: introInkWrite 1900ms cubic-bezier(0.35, 0.05, 0.2, 1) 820ms forwards;
+}
+
+.intro-arabesque {
+  fill: none;
+  stroke: url(#intro-ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 440;
+  stroke-dashoffset: 440;
+  filter: url(#intro-ink-glow);
+  animation: introFlourishWrite 1200ms ease-out 2300ms forwards;
+}
+
+.intro-arabesque-bottom {
+  stroke-dasharray: 560;
+  stroke-dashoffset: 560;
+  animation-delay: 2450ms;
+}
+
+.intro-arabic-name {
+  fill: #f5d894;
+  font-family: 'Noto Naskh Arabic', 'Traditional Arabic', serif;
+  font-size: 34px;
+  opacity: 0;
+  animation: introArabicReveal 700ms ease-out 2550ms forwards;
+}
+
+.chrome-intro-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: -1.5rem;
+  color: #b8a77e;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: introArabicReveal 700ms ease-out 2600ms forwards;
+}
+
+.chrome-intro-rule {
+  width: clamp(1.5rem, 8vw, 4rem);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #b78a37);
+}
+
+.chrome-intro-rule:last-child {
+  transform: rotate(180deg);
+}
+
+.chrome-loading-dots {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1.3rem;
+}
+
+.chrome-loading-dots .chrome-loading-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+}
+
+@keyframes introInkWrite {
+  0% { fill-opacity: 0; stroke-dashoffset: 1450; }
+  84% { fill-opacity: 0; }
+  100% { fill-opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes introFlourishWrite {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes introArabicReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes chicagoIntroReveal {
   from { opacity: 0; transform: scale(0.82); }
   to { opacity: 1; transform: scale(1); }
@@ -350,10 +442,38 @@ body[data-theme="lime"] [class~="shadow-purple-600/30"] {
   .chicago-world::after,
   .chicago-ambient-token,
   .promotion-track,
+  .intro-ink-word,
+  .intro-arabesque,
+  .intro-arabic-name,
+  .chrome-intro-caption,
   .chicago-intro-logo,
   .chicago-loading-dot,
   .chrome-intro-wordmark,
   .chrome-loading-dot {
+    animation: none;
+  }
+
+  .intro-ink-word {
+    fill-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  .intro-arabesque {
+    stroke-dashoffset: 0;
+  }
+
+  .intro-arabic-name,
+  .chrome-intro-caption {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .chicago-world::before,
+  .chicago-world::after,
+  .chicago-ambient {
+    display: none;
     animation: none;
   }
 }
@@ -372,13 +492,22 @@ button:not(:disabled), a {
   touch-action: manipulation;
 }
 
+button:not(:disabled), a {
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:where(button:not(:disabled), a) {
+  transition-property: transform, opacity, color, background-color, border-color;
+}
+
 button:not(:disabled):active, a:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 
 #root img {
   opacity: 0;
-  transition: opacity 240ms ease-out;
+  transition: opacity 140ms ease-out;
 }
 
 #root img.is-image-loaded {
@@ -471,4 +600,203 @@ body[data-theme="neon"] .chrome-loading-dot {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+body[data-theme="neon"] {
+  --chicago-wordmark-stroke: #4a2d0b;
+  --chicago-chrome-1: #fff8df;
+  --chicago-chrome-2: #d6a542;
+  --chicago-chrome-3: #ffebad;
+  --chicago-chrome-4: #80581d;
+  --chicago-chrome-5: #f0c66c;
+  --chicago-chrome-6: #513913;
+  --chicago-chrome-7: #fff1c8;
+  --chicago-chrome-8: #b98531;
+  --chicago-chrome-9: #3f2a0d;
+  --chicago-drip-1: #ffe4a0;
+  --chicago-drip-2: #594018;
+  --chicago-drip-3: #d6a542;
+  --chicago-drip-4: #402d13;
+  --chicago-drip-5: #e8bd61;
+  background-color: #080a08;
+  color: #f7f1e2;
+}
+
+body[data-theme="neon"] .desktop-app-shell {
+  background-color: #080a08 !important;
+  background-image:
+    radial-gradient(ellipse at 82% 0%, rgb(181 129 42 / 0.18), transparent 34rem),
+    radial-gradient(ellipse at 8% 30%, rgb(24 84 57 / 0.2), transparent 30rem),
+    radial-gradient(ellipse at 95% 78%, rgb(110 71 24 / 0.14), transparent 32rem),
+    linear-gradient(155deg, #080a08 0%, #111510 54%, #17130b 100%) !important;
+  color: #f7f1e2;
+}
+
+body[data-theme="neon"] .chicago-world::before {
+  background:
+    radial-gradient(ellipse at 12% 18%, rgb(196 146 55 / 0.13), transparent 34%),
+    radial-gradient(ellipse at 88% 36%, rgb(31 110 67 / 0.12), transparent 30%),
+    radial-gradient(ellipse at 55% 90%, rgb(135 87 28 / 0.1), transparent 34%);
+}
+
+body[data-theme="neon"] .chicago-world::after {
+  background-image: radial-gradient(circle, rgb(255 224 153 / 0.62) 1px, transparent 1.5px);
+}
+
+body[data-theme="neon"] .chicago-ambient-coin {
+  border-color: rgb(255 230 153 / 0.92);
+  color: #fff8db;
+  background: radial-gradient(circle at 30% 25%, #fff8d8, #e0ad45 45%, #6f4614 100%);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.24), 0 0 22px rgb(220 165 60 / 0.38);
+  text-shadow: 0 1px 3px #4c300d;
+}
+
+body[data-theme="neon"] .chicago-ambient-diamond {
+  color: #e86a62;
+  text-shadow: 0 0 8px #ea554b, 0 0 24px rgb(226 64 54 / 0.6);
+}
+
+body[data-theme="neon"] .chicago-ambient-star {
+  color: #ffe39a;
+  text-shadow: 0 0 8px #e6b849, 0 0 24px rgb(230 184 73 / 0.62);
+}
+
+body[data-theme="neon"] .chrome-intro {
+  background:
+    radial-gradient(ellipse at 50% 78%, rgb(174 123 36 / 0.24), transparent 42%),
+    radial-gradient(ellipse at 50% 24%, rgb(38 89 58 / 0.18), transparent 48%),
+    #080a08;
+}
+
+body[data-theme="neon"] .chrome-intro-wordmark,
+body[data-theme="neon"] .chicago-header-wordmark,
+body[data-theme="neon"] .desktop-brand-mark {
+  filter: drop-shadow(0 0 12px rgb(221 174 75 / 0.28));
+}
+
+body[data-theme="neon"] .chrome-loading-dot {
+  background: linear-gradient(180deg, #fff4c9, #d6a542 55%, #75511e);
+  box-shadow: 0 0 10px rgb(220 165 60 / 0.4);
+}
+
+/* ==========================================================================
+   Thème optionnel « Melbet jaune » — activable via le bouton de thème.
+   Fond gris-bleu, cartes blanches, accent jaune, texte sombre.
+   (isDark est false pour ce thème : on recolore les classes du mode clair.)
+   ========================================================================== */
+body[data-theme="melbet"] {
+  --chicago-wordmark-stroke: #1b2433;
+  --chicago-chrome-1: #fff4cf;
+  --chicago-chrome-2: #f2b52c;
+  --chicago-chrome-3: #ffe08a;
+  --chicago-chrome-4: #c98a06;
+  --chicago-chrome-5: #f7c85a;
+  --chicago-chrome-6: #8a5a00;
+  --chicago-chrome-7: #fff0bd;
+  --chicago-chrome-8: #d9a021;
+  --chicago-chrome-9: #5c3d00;
+  --chicago-drip-1: #ffe08a;
+  --chicago-drip-2: #8a5a00;
+  --chicago-drip-3: #f2b52c;
+  --chicago-drip-4: #5c3d00;
+  --chicago-drip-5: #e3a21a;
+  background-color: #e9edf3;
+  color: #1b2433;
+  color-scheme: light;
+}
+
+body[data-theme="melbet"] .desktop-app-shell {
+  background-color: #e9edf3 !important;
+  background-image: none !important;
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .chicago-world::before,
+body[data-theme="melbet"] .chicago-world::after,
+body[data-theme="melbet"] .chicago-ambient {
+  display: none;
+}
+
+body[data-theme="melbet"] [class~="bg-slate-50"],
+body[data-theme="melbet"] [class~="hover:bg-slate-50"]:hover {
+  background-color: #eef1f6 !important;
+}
+
+body[data-theme="melbet"] [class~="border-slate-100"],
+body[data-theme="melbet"] [class~="border-slate-200"] {
+  border-color: #e2e7ef !important;
+}
+
+body[data-theme="melbet"] [class~="text-slate-500"],
+body[data-theme="melbet"] [class~="text-slate-400"] {
+  color: #6f7f96 !important;
+}
+
+body[data-theme="melbet"] [class~="bg-[#6B38FB]"],
+body[data-theme="melbet"] [class~="bg-purple-600"],
+body[data-theme="melbet"] [class~="bg-[#8B5CF6]"] {
+  background-color: #f2b52c !important;
+  color: #1b2433 !important;
+}
+
+body[data-theme="melbet"] [class~="hover:bg-[#5B2AE8]"]:hover {
+  background-color: #e3a21a !important;
+}
+
+body[data-theme="melbet"] [class~="text-[#8B5CF6]"],
+body[data-theme="melbet"] [class~="text-[#6B38FB]"],
+body[data-theme="melbet"] [class~="text-[#4F46E5]"],
+body[data-theme="melbet"] [class~="text-purple-400"],
+body[data-theme="melbet"] [class~="text-purple-500"] {
+  color: #c98a06 !important;
+}
+
+body[data-theme="melbet"] [class~="border-purple-200"],
+body[data-theme="melbet"] [class~="border-purple-500/40"],
+body[data-theme="melbet"] [class~="border-purple-500/30"] {
+  border-color: rgb(242 181 44 / 0.5) !important;
+}
+
+body[data-theme="melbet"] [class~="bg-purple-600/20"] {
+  background-color: rgb(242 181 44 / 0.25) !important;
+}
+
+body[data-theme="melbet"] [class~="hover:bg-purple-50"]:hover {
+  background-color: #fff6dd !important;
+}
+
+body[data-theme="melbet"] [class~="shadow-purple-600/30"] {
+  --tw-shadow-color: rgb(242 181 44 / 0.35);
+}
+
+body[data-theme="melbet"] .glow-gold {
+  box-shadow: 0 4px 18px -2px rgb(242 181 44 / 0.4);
+}
+
+body[data-theme="melbet"] .chrome-intro {
+  background:
+    radial-gradient(ellipse at 50% 78%, rgb(242 181 44 / 0.28), transparent 44%),
+    radial-gradient(ellipse at 50% 20%, rgb(255 255 255 / 0.9), transparent 50%),
+    #e9edf3;
+}
+
+body[data-theme="melbet"] .chrome-intro-wordmark,
+body[data-theme="melbet"] .chicago-header-wordmark,
+body[data-theme="melbet"] .desktop-brand-mark {
+  filter: drop-shadow(0 0 10px rgb(242 181 44 / 0.35));
+}
+
+body[data-theme="melbet"] .chrome-loading-dot {
+  background: linear-gradient(180deg, #ffe9a8, #f2b52c 55%, #c98a06);
+  box-shadow: 0 0 10px rgb(242 181 44 / 0.45);
+}
+
+body[data-theme="melbet"] .demo-balance-pulse {
+  animation-name: demoBalancePulseMelbet;
+}
+
+@keyframes demoBalancePulseMelbet {
+  0% { transform: scale(1); color: inherit; }
+  45% { transform: scale(1.35); color: #c98a06; text-shadow: 0 0 12px rgb(242 181 44 / 0.7); }
+  100% { transform: scale(1); color: inherit; }
 }

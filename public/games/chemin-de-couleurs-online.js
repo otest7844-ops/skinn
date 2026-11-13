@@ -2,7 +2,7 @@
   const gameId = 'chemin-de-couleurs'
   let online = false
   let slot = 0
-  let showingLevel = 0
+  let showingTurn = -1
   let animationId = 0
 
   function send(input) {
@@ -16,14 +16,14 @@
     lenEl.textContent = String(sequence.length)
     state = 'showing'
     reset()
-    msg.textContent = 'Mémorise le chemin…'
+    msg.textContent = 'Mémorise les 10 cases rouges…'
     const speed = Math.max(380, 700 - level * 25)
     void (async () => {
       await sleep(900)
       for (let index = 0; index < sequence.length; index += 1) {
         if (currentAnimation !== animationId) return
-        setT(sequence[index], .12, BLUE)
-        lightOn(sequence[index], BLUE, 3.5)
+        setT(sequence[index], .12, RED)
+        lightOn(sequence[index], RED, 3.5)
         beep(300 + index * 35)
         await sleep(speed)
         if (currentAnimation !== animationId) return
@@ -43,10 +43,10 @@
       animationId += 1
       state = 'over'
       msg.textContent = serverState.winner === null
-        ? 'Égalité — même niveau atteint.'
+        ? 'Égalité — même nombre de cases réussies.'
         : serverState.winner === slot
-          ? `Victoire ! Vous avez atteint le niveau ${serverState.scores[slot]}.`
-          : `Partie terminée au niveau ${serverState.level}.`
+          ? `Victoire ! Vous avez réussi ${serverState.scores[slot]}/10 cases.`
+          : `Partie terminée. Votre score : ${serverState.scores[slot]}/10.`
       go.textContent = 'Rejouer'
       go.style.display = ''
       go.onclick = () => window.parent.postMessage({ type: `${gameId}:rematch` }, window.location.origin)
@@ -54,27 +54,32 @@
     }
 
     go.style.display = 'none'
-    if (serverState.phase === 'showing' && Array.isArray(serverState.path)
-      && showingLevel !== serverState.level) {
-      showingLevel = serverState.level
-      showSequence(serverState.path, serverState.level)
+    if (serverState.phase === 'showing') {
+      if (serverState.turnSlot !== slot) {
+        if (state !== 'waiting') {
+          animationId += 1
+          reset()
+        }
+        state = 'waiting'
+        msg.textContent = 'Au tour de l’autre joueur…'
+      } else if (Array.isArray(serverState.path)
+        && showingTurn !== serverState.turnNumber) {
+        showingTurn = serverState.turnNumber
+        showSequence(serverState.path, serverState.level)
+      }
       return
     }
 
     if (serverState.phase === 'input') {
       animationId += 1
-      path = path.length ? path : Array.isArray(serverState.path) ? serverState.path : []
-      state = serverState.failed[slot] || serverState.completed[slot] ? 'done' : 'input'
-      step = serverState.progress[slot]
-      if (serverState.failed[slot]) {
-        msg.textContent = `Vous avez manqué le chemin. Niveau ${serverState.level}.`
-      } else if (serverState.completed[slot]) {
-        msg.textContent = `Niveau ${serverState.level} réussi ! En attente de l’adversaire…`
-      } else {
-        msg.textContent = serverState.youFailed
-          ? 'Votre adversaire a manqué le chemin.'
-          : `À vous : ${step}/${lenEl.textContent} cases.`
+      if (serverState.turnSlot !== slot) {
+        state = 'waiting'
+        msg.textContent = 'Au tour de l’autre joueur…'
+        return
       }
+      state = 'input'
+      step = serverState.progress[slot]
+      msg.textContent = `À vous de reproduire le chemin : ${step}/10 cases.`
     }
   }
 
@@ -93,7 +98,7 @@
     if (message.type === `${gameId}:enable`) {
       online = true
       slot = message.slot === 1 ? 1 : 0
-      showingLevel = 0
+      showingTurn = -1
       animationId += 1
       go.style.display = 'none'
       return

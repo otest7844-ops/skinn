@@ -745,6 +745,254 @@ body:has(.arcade-online-screen)::-webkit-scrollbar {
   }
 }
 
+.arcade-online-screen--canyon .arcade-game-topbar {
+  z-index: 3;
+  top: max(0.5rem, env(safe-area-inset-top));
+  right: max(0.5rem, env(safe-area-inset-right));
+  left: max(0.5rem, env(safe-area-inset-left));
+  justify-content: flex-start;
+  pointer-events: none;
+}
+
+.arcade-online-screen--canyon .arcade-game-topbar .arcade-match-label,
+.arcade-online-screen--canyon .arcade-game-topbar .arcade-connection {
+  display: none;
+}
+
+.arcade-online-screen--canyon .arcade-game-topbar .arcade-back-button {
+  width: 2.5rem;
+  min-height: 2.5rem;
+  justify-content: center;
+  border-color: rgb(255 255 255 / 0.3);
+  border-radius: 50%;
+  background: rgb(20 13 10 / 0.55);
+  padding: 0;
+  font-size: 0;
+  backdrop-filter: blur(6px);
+}
+
+.arcade-online-screen--canyon .arcade-game-topbar .arcade-back-button span {
+  display: none;
+}
+
+/* Dark casino lounge styling for online rooms. */
+.arcade-online-screen {
+  --room-gold: #f2c66d;
+  --room-gold-light: #ffe6a4;
+  --room-surface: #111615;
+  --room-muted: #a7aaa0;
+  background:
+    radial-gradient(ellipse at 50% 12%, rgb(148 99 30 / 0.2), transparent 34rem),
+    radial-gradient(ellipse at 8% 82%, rgb(24 84 57 / 0.16), transparent 28rem),
+    linear-gradient(145deg, #080b0a, #101411 58%, #090b0a);
+  color: #f5f0e2;
+}
+
+.arcade-online-screen:not(.arcade-online-screen--princess) .arcade-lobby {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 50% 8%, rgb(168 116 38 / 0.14), transparent 36rem),
+    radial-gradient(ellipse at 50% 92%, rgb(20 91 56 / 0.12), transparent 32rem),
+    linear-gradient(160deg, #080b0a, #101512 58%, #080a09);
+}
+
+.arcade-online-screen:not(.arcade-online-screen--princess) .arcade-lobby::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(circle, rgb(255 222 153 / 0.2) 1px, transparent 1.5px);
+  background-position: 12px 18px;
+  background-size: 64px 64px;
+  content: "";
+  mask-image: radial-gradient(ellipse at center, #000 8%, transparent 76%);
+  pointer-events: none;
+}
+
+.arcade-lobby-header,
+.arcade-game-topbar {
+  color: #d7d0bc;
+}
+
+.arcade-back-button,
+.arcade-match-label {
+  border-color: rgb(242 198 109 / 0.3);
+  background: rgb(12 16 14 / 0.88);
+  color: #f5e8c8;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.24);
+  backdrop-filter: blur(12px);
+}
+
+.arcade-back-button:hover {
+  border-color: var(--room-gold);
+  background: #1b211a;
+}
+
+.arcade-connection.is-connected,
+.arcade-match-label i {
+  color: #7de0a0;
+}
+
+.arcade-lobby-card {
+  position: relative;
+  border-color: rgb(242 198 109 / 0.48);
+  border-radius: 1.1rem;
+  background:
+    linear-gradient(145deg, rgb(27 31 25 / 0.98), rgb(12 16 14 / 0.99)),
+    var(--room-surface);
+  box-shadow:
+    0 28px 90px rgb(0 0 0 / 0.62),
+    0 0 0 1px rgb(255 224 155 / 0.08),
+    0 0 44px rgb(183 127 43 / 0.12);
+  backdrop-filter: blur(18px);
+}
+
+.arcade-lobby-eyebrow,
+.arcade-room-code button {
+  color: var(--room-gold-light);
+}
+
+.arcade-lobby-card h1 {
+  color: #fff7e6;
+  font-family: Georgia, "Times New Roman", serif;
+  text-shadow: 0 2px 24px rgb(242 198 109 / 0.18);
+}
+
+.game-controls-guide {
+  border-color: rgb(242 198 109 / 0.25);
+  background: linear-gradient(145deg, rgb(8 12 10 / 0.86), rgb(18 24 19 / 0.92));
+  color: #e6e3d8;
+}
+
+.game-controls-guide > strong {
+  color: var(--room-gold-light);
+}
+
+.game-controls-guide p,
+.arcade-field,
+.arcade-lobby-hint {
+  color: #c9c7bc;
+}
+
+.arcade-field input,
+.arcade-field select {
+  border-color: rgb(233 217 174 / 0.2);
+  border-radius: 0.7rem;
+  background: #090d0b;
+  color: #fff8e9;
+}
+
+.arcade-field input:focus,
+.arcade-field select:focus {
+  border-color: var(--room-gold);
+  box-shadow: 0 0 0 3px rgb(242 198 109 / 0.12);
+}
+
+.arcade-field select option {
+  background: #111612;
+}
+
+.arcade-primary-button,
+.arcade-secondary-button {
+  min-height: 3rem;
+  border-radius: 0.72rem;
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.arcade-primary-button {
+  border-color: #ffe6a4;
+  background: linear-gradient(180deg, #ffe49a, #d6a742 58%, #a87927);
+  box-shadow: 0 4px 0 #755019, 0 10px 24px rgb(173 123 40 / 0.2);
+  color: #211909;
+}
+
+.arcade-primary-button:not(:disabled):hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 0 #755019, 0 0 26px rgb(242 198 109 / 0.25);
+}
+
+.arcade-secondary-button {
+  border-color: rgb(242 198 109 / 0.28);
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.025));
+  color: #f2ead8;
+}
+
+.arcade-secondary-button:not(:disabled):hover {
+  border-color: rgb(242 198 109 / 0.72);
+  background: rgb(242 198 109 / 0.09);
+}
+
+.arcade-primary-button.is-ready {
+  border-color: #8cda9d;
+  background: linear-gradient(180deg, #78d394, #307c4c);
+  box-shadow: 0 4px 0 #1d5031, 0 10px 24px rgb(52 156 87 / 0.2);
+  color: #f0fff4;
+}
+
+.arcade-public-toggle {
+  color: #d9d3c3;
+}
+
+.arcade-public-toggle input {
+  accent-color: #e8ba5b;
+}
+
+.arcade-join-form {
+  border-color: rgb(242 198 109 / 0.2);
+}
+
+.arcade-room-code strong {
+  color: var(--room-gold-light);
+  text-shadow: 0 0 20px rgb(242 198 109 / 0.14);
+}
+
+.arcade-player-list > div {
+  border-color: rgb(242 198 109 / 0.16);
+  background: rgb(6 10 8 / 0.54);
+}
+
+.arcade-player-list small,
+.arcade-lobby-hint {
+  color: var(--room-muted);
+}
+
+.arcade-countdown {
+  color: var(--room-gold-light);
+}
+
+.arcade-result-score {
+  border-color: rgb(242 198 109 / 0.28);
+  background: rgb(6 10 8 / 0.72);
+}
+
+.arcade-result-score strong,
+.arcade-result-score b {
+  color: var(--room-gold-light);
+}
+
+.arcade-feedback {
+  color: #ffd2ae;
+}
+
+.arcade-action-pad button,
+.head-football-touch-buttons button {
+  border-color: rgb(242 198 109 / 0.45);
+  background: rgb(10 14 12 / 0.92);
+}
+
+.arcade-action-pad button:active,
+.head-football-touch-buttons button:active {
+  background: #b98531;
+  color: #151109;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arcade-primary-button,
+  .arcade-secondary-button {
+    transition: none;
+  }
+}
+
 .arcade-ceremony {
   position: absolute;
   z-index: 10;
@@ -997,4 +1245,313 @@ body:has(.arcade-online-screen)::-webkit-scrollbar {
     animation-duration: 1ms;
     animation-delay: 0ms;
   }
+}
+
+/* ==========================================================================
+   Thème optionnel « Melbet jaune » pour les salons en ligne
+   (fond gris-bleu, cartes blanches, accent jaune, texte sombre)
+   ========================================================================== */
+body[data-theme="melbet"] .arcade-online-screen {
+  --room-gold: #f2b52c;
+  --room-gold-light: #c98a06;
+  --room-surface: #ffffff;
+  --room-muted: #6f7f96;
+  background: #e9edf3;
+  color: #1b2433;
+  font-family: 'Plus Jakarta Sans', Inter, "Segoe UI", Arial, sans-serif;
+}
+
+@media (max-width: 440px) {
+  .arcade-lobby {
+    padding: max(3.75rem, calc(env(safe-area-inset-top) + 3rem)) 0.75rem max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .arcade-lobby-card {
+    padding: 0.75rem 0.9rem;
+    border-radius: 1rem;
+  }
+
+  .arcade-lobby-card h1 {
+    margin: 0.25rem 0 0.6rem;
+    font-size: clamp(1.7rem, 7.5vw, 2.1rem);
+  }
+
+  .game-controls-guide {
+    margin-bottom: 0.4rem;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.66rem;
+    line-height: 1.25;
+  }
+
+  .game-controls-guide ul {
+    gap: 0.1rem;
+    margin: 0.2rem 0;
+  }
+
+  .game-controls-guide p {
+    margin-top: 0.2rem;
+  }
+
+  .arcade-field {
+    gap: 0.25rem;
+    margin: 0.35rem 0;
+  }
+
+  .arcade-field input,
+  .arcade-field select {
+    padding: 0.5rem 0.7rem;
+  }
+
+  .arcade-primary-button,
+  .arcade-secondary-button {
+    min-height: 2.35rem;
+    margin-top: 0.25rem;
+    padding: 0.4rem 0.75rem;
+  }
+}
+
+body[data-theme="melbet"] .arcade-online-screen .arcade-lobby,
+body[data-theme="melbet"] .arcade-online-screen--princess .arcade-lobby {
+  background: #e9edf3;
+}
+
+body[data-theme="melbet"] .arcade-online-screen--princess {
+  background: #e9edf3;
+}
+
+body[data-theme="melbet"] .arcade-online-screen .arcade-lobby::before {
+  display: none;
+}
+
+body[data-theme="melbet"] .arcade-lobby-header,
+body[data-theme="melbet"] .arcade-game-topbar {
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-back-button,
+body[data-theme="melbet"] .arcade-match-label {
+  border-color: rgb(242 181 44 / 0.6);
+  background: rgb(255 255 255 / 0.94);
+  color: #1b2433;
+  box-shadow: 0 6px 18px rgb(27 36 51 / 0.14);
+}
+
+body[data-theme="melbet"] .arcade-back-button:hover {
+  border-color: #f2b52c;
+  background: #fff6dd;
+}
+
+body[data-theme="melbet"] .arcade-connection {
+  color: #dc2626;
+}
+
+body[data-theme="melbet"] .arcade-connection.is-connected,
+body[data-theme="melbet"] .arcade-match-label i {
+  color: #16a34a;
+}
+
+body[data-theme="melbet"] .arcade-disconnect-notice {
+  border-color: rgb(242 181 44 / 0.6);
+  background: #fff6dd;
+  color: #7a4f00;
+}
+
+body[data-theme="melbet"] .arcade-lobby-card,
+body[data-theme="melbet"] .arcade-online-screen--princess .arcade-lobby-card {
+  border-color: #e2e7ef;
+  border-radius: 1.1rem;
+  background: #ffffff;
+  box-shadow: 0 16px 48px rgb(27 36 51 / 0.12);
+  backdrop-filter: none;
+}
+
+body[data-theme="melbet"] .arcade-lobby-eyebrow,
+body[data-theme="melbet"] .arcade-room-code button {
+  color: #c98a06;
+}
+
+body[data-theme="melbet"] .arcade-lobby-card h1 {
+  color: #1b2433;
+  font-family: inherit;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-shadow: none;
+}
+
+body[data-theme="melbet"] .game-controls-guide {
+  border-color: #e2e7ef;
+  background: #eef1f6;
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .game-controls-guide > strong {
+  color: #c98a06;
+}
+
+body[data-theme="melbet"] .game-controls-guide p,
+body[data-theme="melbet"] .arcade-field,
+body[data-theme="melbet"] .arcade-lobby-hint,
+body[data-theme="melbet"] .arcade-player-list small {
+  color: #6f7f96;
+}
+
+body[data-theme="melbet"] .arcade-field input,
+body[data-theme="melbet"] .arcade-field select {
+  border-color: #e2e7ef;
+  background: #eef1f6;
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-field input:focus,
+body[data-theme="melbet"] .arcade-field select:focus {
+  border-color: #f2b52c;
+  box-shadow: 0 0 0 3px rgb(242 181 44 / 0.22);
+}
+
+body[data-theme="melbet"] .arcade-field select option {
+  background: #ffffff;
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-primary-button {
+  border-color: #f2b52c;
+  background: #f2b52c;
+  box-shadow: 0 6px 16px rgb(242 181 44 / 0.35);
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-primary-button:not(:disabled):hover {
+  background: #e3a21a;
+  filter: none;
+  box-shadow: 0 8px 22px rgb(242 181 44 / 0.45);
+}
+
+body[data-theme="melbet"] .arcade-primary-button.is-ready {
+  border-color: #16a34a;
+  background: #16a34a;
+  box-shadow: 0 6px 16px rgb(22 163 74 / 0.3);
+  color: #ffffff;
+}
+
+body[data-theme="melbet"] .arcade-secondary-button {
+  border-color: #d8dfea;
+  background: #ffffff;
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-secondary-button:not(:disabled):hover {
+  border-color: #f2b52c;
+  background: #fff6dd;
+}
+
+body[data-theme="melbet"] .arcade-public-toggle {
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-public-toggle input {
+  accent-color: #f2b52c;
+}
+
+body[data-theme="melbet"] .arcade-join-form {
+  border-color: #e2e7ef;
+}
+
+body[data-theme="melbet"] .arcade-room-code strong {
+  color: #1b2433;
+  text-shadow: none;
+}
+
+body[data-theme="melbet"] .arcade-player-list > div {
+  border-color: #e2e7ef;
+  background: #eef1f6;
+}
+
+body[data-theme="melbet"] .arcade-countdown {
+  color: #c98a06;
+}
+
+body[data-theme="melbet"] .arcade-result-score {
+  border-color: #e2e7ef;
+  background: #eef1f6;
+}
+
+body[data-theme="melbet"] .arcade-result-score strong,
+body[data-theme="melbet"] .arcade-result-score b {
+  color: #c98a06;
+}
+
+body[data-theme="melbet"] .arcade-result-score span {
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-result-score i {
+  color: #6f7f96;
+}
+
+body[data-theme="melbet"] .arcade-result-score.is-win {
+  border-color: #16a34a;
+  background: #e3f6ec;
+}
+
+body[data-theme="melbet"] .arcade-result-score.is-loss {
+  border-color: #ef4444;
+  background: #fdebec;
+}
+
+body[data-theme="melbet"] .arcade-result-score.is-draw {
+  border-color: #f2b52c;
+}
+
+body[data-theme="melbet"] .arcade-feedback {
+  color: #c2410c;
+}
+
+body[data-theme="melbet"] .arcade-score-strip span {
+  border-color: rgb(242 181 44 / 0.55);
+  background: rgb(255 255 255 / 0.94);
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-score-strip span.is-you {
+  border-color: #f2b52c;
+}
+
+body[data-theme="melbet"] .arcade-action-pad button,
+body[data-theme="melbet"] .head-football-touch-buttons button {
+  border-color: rgb(242 181 44 / 0.7);
+  background: rgb(255 255 255 / 0.94);
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-action-pad button:active,
+body[data-theme="melbet"] .head-football-touch-buttons button:active {
+  background: #f2b52c;
+  color: #1b2433;
+}
+
+body[data-theme="melbet"] .arcade-arena-controls > span {
+  color: #1b2433;
+  background: rgb(255 255 255 / 0.9);
+  border-radius: 999px;
+  padding: 0.2rem 0.45rem;
+}
+
+body[data-theme="melbet"] .arcade-princess-result {
+  border-color: rgb(242 181 44 / 0.7);
+  background: rgb(255 255 255 / 0.97);
+  color: #1b2433;
+  box-shadow: 0 10px 40px rgb(27 36 51 / 0.2);
+}
+
+body[data-theme="melbet"] .arcade-princess-result strong {
+  color: #c98a06;
+  font-family: inherit;
+}
+
+body[data-theme="melbet"] .head-football-selection {
+  border-color: #e2e7ef;
+}
+
+body[data-theme="melbet"] .head-football-selection h2 {
+  color: #1b2433;
 }

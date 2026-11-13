@@ -1,16 +1,13 @@
 # React + TypeScript + Vite
 
-## Mosswing Online
+## New standalone games
 
-The original Mosswing WebGL game is kept at `public/games/mosswing.html`. Online
-matches reuse its Three.js scene and creature model, showing both players and
-their in-world nameplates together. The Socket.IO server authoritatively
-simulates both flight states against one shared, seeded obstacle course and
-broadcasts interpolated player positions, scores, and connection status.
-Flight controls and obstacle spacing are tuned to be more forgiving, and the
-game now uses a brighter sky with green gates. An eliminated player can still
-watch the surviving creature fly; elimination and result screens do not blur
-the game scene.
+Piaf Plume replaces Mosswing in the home game catalog. Lave Montante and Mirror
+Run are also available there. These games run in isolated full-screen frames;
+Lave Montante and Mirror Run load Three.js r128 from cdnjs.
+Lave Montante and Mirror Run also support free public rooms. Players race in the
+same course, see the opponent's live avatar and progress, and can join rooms
+from the home screen.
 
 Run the app and multiplayer server in two terminals:
 
@@ -19,13 +16,32 @@ npm run dev
 npm run server
 ```
 
+## Démo d’inscription CHICAGO
+
+L’inscription ou la connexion est obligatoire avant d’entrer dans la plateforme.
+Le formulaire demande le pays et le type d’appareil; le bouton de création reste
+bloqué jusqu’à la fin du défilement des conditions et la confirmation des quatre
+cases.
+Les comptes sont conservés dans `server/data/chicago-auth.sqlite` (exclu de Git).
+Un compte reçoit un identifiant unique de 10 chiffres et un mot de passe aléatoire
+de 8 lettres, affiché une seule fois après l’inscription. Les comptes créés avec
+l’ancien format de mot de passe restent compatibles. L’authentification
+utilise un cookie HttpOnly et un jeton aléatoire local au navigateur; une connexion
+depuis un autre navigateur transfère l’association et ferme la session précédente.
+
+Le calcul anti-robot est une vérification de démonstration locale, pas une
+protection anti-bot suffisante pour une mise en production. Les dépôts, retraits,
+mises et paiements réels ne sont pas actifs. Avant toute mise en production,
+remplacer le CAPTCHA démo, compléter l’exploitant et la juridiction des conditions,
+et configurer les origines publiques dans `AUTH_ALLOWED_ORIGINS`.
+
 ## Arcade duels
 
 Quantum Duel (Tic-Tac-Toe), Football 19, Tape-Tape Arena, Mémo 5×5, Chasse aux mots, Dictée Éclair, Ping-Pong,
 Basketball Stars, Ball Rush 3D, Pont de la forêt 3D, Le Labyrinthe des Damnés,
 La Course vers la Princesse, Grotte aux Couteaux, Colonnes du Canyon, Arène
 Hélice, Duel de Troncs, Échecs 3D, Embuscade, Moto Taxi Afrique, Chemin de
-couleurs 3D, Duel de cartes 3D, and Mosswing use two-player rooms.
+couleurs 3D, and Duel de cartes 3D use two-player rooms.
 Football 19 compares five penalty shots per player, and Tape-Tape synchronizes
 the tap race scores and server-side idle decay while each player controls only
 their own lane. Ping-Pong and Basketball run
@@ -37,6 +53,13 @@ fully server-authoritative, so their results are not cheat-proof. Running
 rounds pause on disconnect and resume after the player reconnects. Run both
 commands above for online matches; each player can create or join a
 six-character room code.
+
+Quiz Arène supports solo and online 1v1 play with 10 questions per run, a
+15-second answer timer, a five-second reveal, three lives, and three 50/50
+jokers. In online play, answers stay hidden until the timer expires, then both
+choices and the correct answer are revealed. Its solo score is separate from
+the demo wallet. Its online mode uses server-validated answers, shared
+questions, lives, jokers, room codes, and optional demo-credit stakes.
 
 ### Échecs 3D et Embuscade
 
@@ -54,9 +77,37 @@ The home-screen demo cards do not yet have game engines and are not online games
 
 The supplied 3D game pages and artwork are bundled in `public/games/` and
 `public/images/`. Each game can be launched solo or through a public or private
-two-player room. The server validates taxi controls and race progress, checks
-each color-path selection without disclosing the path during the response phase,
-and keeps card hands private until both players have played.
+two-player room. The server validates taxi controls and race progress, gives each
+color-path player a separate turn with a different 10-tile red sequence without
+disclosing that sequence during the response phase, and keeps card hands private
+until both players have played.
+
+### Ghasaq — FPS de survie
+
+Ghasaq is included as a first-person shooter at
+`public/games/ghasaq/`. Its original Vite source and MIT license are preserved
+in `games/ghasaq/` (source: https://github.com/aymansalkhatib/ghasaq). The
+build outputs directly to the public game directory:
+run `npm ci --prefix games/ghasaq` once, then `npm run build:ghasaq` whenever
+the game source changes. The arcade launches it in a responsive iframe for
+solo play or a private two-player room. Online rooms offer cooperative shared
+enemy waves or a player-versus-player duel. In cooperative rooms, the host
+simulates the enemy waves and relays the shared enemy state; in duels, the
+server validates shots and applies damage. Persistent ranks, medals, daily
+challenges, and player statistics are removed; only gameplay preferences are
+saved locally. Online matches start automatically when both players are ready,
+using the host's saved game settings instead of the solo menus.
+
+### Counter Siege and DashBot
+
+Counter Siege and DashBot are bundled as isolated browser games in
+`public/games/counter-siege/` and `public/games/dashbot/`. Their original
+MIT-licensed sources and attribution are preserved in `games/counter-siege/`
+and `games/dashbot/`. Each game can be launched solo or in a private,
+no-stakes two-player room; the shared arcade interface supplies room creation,
+joining, and transport. Counter Siege relays bounded gameplay packets between
+the players, while DashBot relays player actions and host snapshots. The room
+server does not independently simulate these imported games.
 
 ### Chasse aux mots
 

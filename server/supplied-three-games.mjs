@@ -1,8 +1,12 @@
 const COLOR_TILES = 25
-const COLOR_MAX_LEVEL = COLOR_TILES
+const COLOR_PATH_LENGTH = 10
 const COLOR_INPUT_TIMEOUT_MS = 20_000
 const TAXI_DISTANCE = 6000
 const TAXI_MAX_DT = 0.05
+const TAXI_LANE_LIMIT = 8.4
+const TAXI_PENALTY_SECONDS = 5
+const TAXI_SIGNAL_FIRST = 450
+const TAXI_SIGNAL_INTERVAL = 700
 const CARD_COUNT = 20
 const CARD_HAND_SIZE = 10
 const CARD_ROUNDS = 10
@@ -25,13 +29,10 @@ function shuffle(values, random) {
   return values
 }
 
-function makeColorPath(level, random) {
-  const length = Math.min(COLOR_MAX_LEVEL, level + 2)
-  if (level >= 6) return shuffle(Array.from({ length: COLOR_TILES }, (_, index) => index), random).slice(0, length)
-
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+function makeColorPath(random) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     const path = [Math.floor(random() * COLOR_TILES)]
-    while (path.length < length) {
+    while (path.length < COLOR_PATH_LENGTH) {
       const current = path.at(-1)
       const x = current % 5
       const y = Math.floor(current / 5)
@@ -44,23 +45,38 @@ function makeColorPath(level, random) {
       if (next.length === 0) break
       path.push(next[Math.floor(random() * next.length)])
     }
-    if (path.length === length) return path
+    if (path.length === COLOR_PATH_LENGTH) return path
   }
-  return shuffle(Array.from({ length: COLOR_TILES }, (_, index) => index), random).slice(0, length)
+  return [0, 1, 2, 3, 4, 9, 8, 7, 6, 5]
 }
 
-function beginColorLevel(state, now) {
-  state.path = makeColorPath(state.level, state.random)
+function beginColorTurn(state, slot, now, previousPath = null) {
+  let path = makeColorPath(state.random)
+  if (previousPath && path.every((tile, index) => tile === previousPath[index])) {
+    path = previousPath.slice().reverse()
+  }
+  state.previousPath = previousPath ? [...previousPath] : null
+  state.path = path
+  state.turnSlot = slot
+  state.turnNumber += 1
   state.phase = 'showing'
-  state.progress = [0, 0]
-  state.failed = [false, false]
-  state.completed = [false, false]
+  state.progress[slot] = 0
+  state.failed[slot] = false
+  state.completed[slot] = false
   const displaySpeed = Math.max(380, 700 - state.level * 25)
   state.phaseEndsAt = now + 1000 + state.path.length * (displaySpeed + 160)
   state.inputDeadline = null
 }
 
-function finishColorMatch(state) {
+function finishColorTurn(state, now) {
+  const currentSlot = state.turnSlot
+  state.scores[currentSlot] = state.progress[currentSlot]
+  if (currentSlot === 0) {
+    const previousPath = state.path
+    beginColorTurn(state, 1, now, previousPath)
+    return
+  }
+
   state.status = 'finished'
   state.phase = 'finished'
   state.phaseEndsAt = null
@@ -70,32 +86,13 @@ function finishColorMatch(state) {
     : state.scores[0] > state.scores[1] ? 0 : 1
 }
 
-function checkColorMatch(state, now) {
-  const bothDone = state.completed.every(Boolean)
-  const bothFailed = state.failed.every(Boolean)
-  if (state.failed[0] && state.completed[1] || state.failed[1] && state.completed[0]) {
-    finishColorMatch(state)
-    return
-  }
-  if (bothFailed) {
-    finishColorMatch(state)
-    return
-  }
-  if (bothDone) {
-    state.level += 1
-    if (state.level > COLOR_MAX_LEVEL) {
-      finishColorMatch(state)
-      return
-    }
-    beginColorLevel(state, now)
-  }
-}
-
 export function createColorPathMatch(seed, now = Date.now()) {
   const state = {
     status: 'playing',
     phase: 'showing',
     level: 1,
+    turnSlot: 0,
+    turnNumber: -1,
     path: [],
     progress: [0, 0],
     scores: [0, 0],
@@ -105,9 +102,10 @@ export function createColorPathMatch(seed, now = Date.now()) {
     phaseEndsAt: null,
     inputDeadline: null,
     lastActionAt: [0, 0],
+    previousPath: null,
     random: randomSource(seed),
   }
-  beginColorLevel(state, now)
+  beginColorTurn(state, 0, now)
   return state
 }
 
@@ -115,7 +113,10 @@ export function colorPathPlayerSnapshot(state, slot, now = Date.now()) {
   const snapshot = { ...state }
   delete snapshot.random
   delete snapshot.lastActionAt
-  snapshot.path = state.phase === 'showing' ? [...state.path] : undefined
+  delete snapshot.previousPath
+  snapshot.path = state.phase === 'showing' && state.turnSlot === slot
+    ? [...state.path]
+    : undefined
   snapshot.phaseRemainingMs = state.phaseEndsAt === null ? 0 : Math.max(0, state.phaseEndsAt - now)
   snapshot.progress = [...state.progress]
   snapshot.scores = [...state.scores]
@@ -130,21 +131,21 @@ export function applyColorPathInput(state, slot, input, now = Date.now()) {
   if (!state || state.status !== 'playing' || state.phase !== 'input'
     || (slot !== 0 && slot !== 1) || !input || input.type !== 'tile'
     || !Number.isInteger(input.tile) || input.tile < 0 || input.tile >= COLOR_TILES
+    || slot !== state.turnSlot
     || state.failed[slot] || state.completed[slot]
     || now - state.lastActionAt[slot] < 80) return false
 
   state.lastActionAt[slot] = now
   if (input.tile !== state.path[state.progress[slot]]) {
     state.failed[slot] = true
-    checkColorMatch(state, now)
+    finishColorTurn(state, now)
     return true
   }
 
   state.progress[slot] += 1
   if (state.progress[slot] === state.path.length) {
     state.completed[slot] = true
-    state.scores[slot] = state.level
-    checkColorMatch(state, now)
+    finishColorTurn(state, now)
   }
   return true
 }
@@ -158,8 +159,8 @@ export function tickColorPathMatch(state, now = Date.now()) {
     return true
   }
   if (state.phase === 'input' && now >= state.inputDeadline) {
-    state.failed = state.failed.map((failed, slot) => failed || !state.completed[slot])
-    checkColorMatch(state, now)
+    state.failed[state.turnSlot] = true
+    finishColorTurn(state, now)
     return true
   }
   return false
@@ -245,11 +246,14 @@ export function createMotoTaxiMatch() {
     status: 'playing',
     phase: 'intro',
     introRemaining: 8.6,
-    players: [0, 1].map(() => ({
+    players: [0, 1].map((slot) => ({
       distance: 0,
       speed: 0,
-      lane: 0,
+      lane: slot === 0 ? -4 : 4,
       finishedAt: null,
+      penaltyRemaining: 0,
+      penaltyReason: null,
+      collisionCooldown: 0,
       input: { left: false, right: false, gas: false, brake: false, horn: false },
     })),
     elapsed: 0,
@@ -259,10 +263,23 @@ export function createMotoTaxiMatch() {
 
 export function applyMotoTaxiInput(state, slot, input) {
   const actions = ['left', 'right', 'gas', 'brake', 'horn']
-  if (!state || state.status !== 'playing' || (slot !== 0 && slot !== 1)
-    || !input || !actions.includes(input.action) || typeof input.pressed !== 'boolean'
-    || state.players[slot].finishedAt !== null) return false
-  state.players[slot].input[input.action] = input.pressed
+  if (!state || state.status !== 'playing' || (slot !== 0 && slot !== 1) || !input) return false
+  const player = state.players[slot]
+  if (input.action === 'violation') {
+    if (state.phase !== 'racing' || input.reason !== 'collision'
+      || !Number.isFinite(input.distance) || Math.abs(input.distance - player.distance) > 24
+      || player.speed < 2 || player.finishedAt !== null || player.penaltyRemaining > 0
+      || player.collisionCooldown > 0) return false
+    player.penaltyRemaining = TAXI_PENALTY_SECONDS
+    player.penaltyReason = 'COLLISION · '
+    player.collisionCooldown = 2
+    player.speed = 0
+    player.input = { left: false, right: false, gas: false, brake: false, horn: false }
+    return true
+  }
+  if (!actions.includes(input.action) || typeof input.pressed !== 'boolean'
+    || player.finishedAt !== null || player.penaltyRemaining > 0) return false
+  player.input[input.action] = input.pressed
   return true
 }
 
@@ -277,14 +294,59 @@ export function tickMotoTaxiMatch(state, dt) {
   state.elapsed += safeDt
   let changed = false
   for (const player of state.players) {
+    player.collisionCooldown = Math.max(0, player.collisionCooldown - safeDt)
     if (player.finishedAt !== null) continue
+    if (player.penaltyRemaining > 0) {
+      player.penaltyRemaining = Math.max(0, player.penaltyRemaining - safeDt)
+      player.speed = 0
+      if (player.penaltyRemaining === 0) player.penaltyReason = null
+      changed = true
+      continue
+    }
     const input = player.input
     const acceleration = input.brake ? -26 : input.gas ? 9 * (1 - player.speed / 30) + 1 : -2.5
     player.speed = Math.max(0, Math.min(30, player.speed + acceleration * safeDt))
-    player.lane = Math.max(-8.4, Math.min(14.5, player.lane + ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * (2.5 + player.speed * 0.2) * safeDt))
+    const previousDistance = player.distance
+    const nextLane = player.lane + ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * (2.5 + player.speed * 0.2) * safeDt
+    if (Math.abs(nextLane) > TAXI_LANE_LIMIT && player.speed > 2) {
+      player.penaltyRemaining = TAXI_PENALTY_SECONDS
+      player.penaltyReason = 'HORS ROUTE · '
+      player.speed = 0
+      player.input = { left: false, right: false, gas: false, brake: false, horn: false }
+      changed = true
+      continue
+    }
+    player.lane = Math.max(-TAXI_LANE_LIMIT, Math.min(TAXI_LANE_LIMIT, nextLane))
     player.distance = Math.min(TAXI_DISTANCE, player.distance + player.speed * safeDt)
+    const firstCrossedSignal = Math.max(0, Math.floor((previousDistance - TAXI_SIGNAL_FIRST) / TAXI_SIGNAL_INTERVAL) + 1)
+    const lastCrossedSignal = Math.floor((player.distance - TAXI_SIGNAL_FIRST) / TAXI_SIGNAL_INTERVAL)
+    for (let signal = firstCrossedSignal; signal <= lastCrossedSignal; signal += 1) {
+      const signalDistance = TAXI_SIGNAL_FIRST + signal * TAXI_SIGNAL_INTERVAL
+      const signalPhase = (state.elapsed + signal * 5.3) % 16
+      if (signalPhase >= 10 && signalPhase < 16) {
+        player.distance = signalDistance - 1.5
+        player.penaltyRemaining = TAXI_PENALTY_SECONDS
+        player.penaltyReason = 'FEU ROUGE · '
+        player.speed = 0
+        player.input = { left: false, right: false, gas: false, brake: false, horn: false }
+      }
+    }
     if (player.distance >= TAXI_DISTANCE) player.finishedAt = state.elapsed
     changed = true
+  }
+  const [first, second] = state.players
+  if (first.finishedAt === null && second.finishedAt === null
+    && first.penaltyRemaining === 0 && second.penaltyRemaining === 0
+    && Math.abs(first.distance - second.distance) < 2.2
+    && Math.abs(first.lane - second.lane) < 1.6
+    && first.speed > 2 && second.speed > 2) {
+    for (const player of state.players) {
+      player.penaltyRemaining = TAXI_PENALTY_SECONDS
+      player.penaltyReason = 'COLLISION · '
+      player.collisionCooldown = 2
+      player.speed = 0
+      player.input = { left: false, right: false, gas: false, brake: false, horn: false }
+    }
   }
   const finishers = state.players
     .map((player, slot) => ({ slot, time: player.finishedAt }))
@@ -303,7 +365,9 @@ export function motoTaxiPlayerSnapshot(state) {
   return {
     status: state.status,
     phase: state.phase,
-    players: state.players.map(({ distance, speed, lane, finishedAt }) => ({ distance, speed, lane, finishedAt })),
+    players: state.players.map(({ distance, speed, lane, finishedAt, penaltyRemaining, penaltyReason }) => ({
+      distance, speed, lane, finishedAt, penaltyRemaining, penaltyReason,
+    })),
     scores: state.players.map((player) => player.distance),
     elapsed: state.elapsed,
     winner: state.winner,

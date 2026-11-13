@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 420">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#101936"/>
+      <stop offset="1" stop-color="#334c78"/>
+    </linearGradient>
+    <linearGradient id="path" x2="0" y2="1">
+      <stop stop-color="#5a78a5"/>
+      <stop offset="1" stop-color="#172339"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="420" rx="32" fill="url(#sky)"/>
+  <circle cx="278" cy="91" r="51" fill="#85d8ff" opacity=".68"/>
+  <path d="m0 330 90-35 61 24 74-44 135 37v108H0z" fill="#263e61"/>
+  <path d="M137 420 166 232h29l36 188z" fill="url(#path)" stroke="#82e9ff" stroke-opacity=".6" stroke-width="3"/>
+  <path d="m179 397 3-44m3-46 2-36" stroke="#fff" stroke-dasharray="14 12" stroke-linecap="round" stroke-width="5" opacity=".75"/>
+  <path d="m72 258 45-22m-44 50 42-20m120-47 43-27m-33 59 51-25" stroke="#68dbff" stroke-linecap="round" stroke-width="5" opacity=".8"/>
+  <g transform="translate(180 204)">
+    <path d="M-15-23h30v36h-30z" rx="8" fill="#35e0ff"/>
+    <circle cy="-36" r="15" fill="#dfe8ff"/>
+    <path d="m-11 13-16 42h14l13-27 13 27h14L11 13z" fill="#366e9a"/>
+    <path d="m-17-5-26 15 5 9 28-11m25-13 25 16-6 8-27-12" fill="none" stroke="#dfe8ff" stroke-linecap="round" stroke-width="7"/>
+  </g>
+  <g fill="#ffc83a">
+    <circle cx="119" cy="181" r="8"/><circle cx="250" cy="140" r="7"/><circle cx="143" cy="112" r="6"/>
+  </g>
+  <text x="180" y="376" fill="#e8f0ff" font-family="system-ui,sans-serif" font-size="33" font-weight="800" letter-spacing="3" text-anchor="middle">MIRROR RUN</text>
+</svg>

@@ -1,0 +1,9 @@
+DashBot
+Original project: https://github.com/jianongHe/DashBot
+Imported revision: 109fcfd99f58fc8888b5f4a2ed507363448603aa
+Copyright (c) 2025 Jianong He
+License: MIT (see LICENSE)
+
+This bundle adapts the original Svelte game to an iframe postMessage bridge,
+uses locally bundled game assets, and removes the original WebSocket server
+and lobby.

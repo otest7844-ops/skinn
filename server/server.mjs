@@ -6,6 +6,7 @@ import express from 'express'
 import { Server } from 'socket.io'
 import { FlightModel, seededRandom } from './flight-model.mjs'
 import { attachArenaManager } from './arena-manager.mjs'
+import { attachAccountAuth } from './account-auth.mjs'
 
 const PORT = Number(process.env.PORT) || 3001
 const ROUND_LIMIT_MS = 120_000
@@ -27,9 +28,11 @@ export function createMosswingServer({
   mazeEmptyMs,
   mazeDisconnectMs,
   mazeFinishedMs,
+  authDatabasePath,
 } = {}) {
   const app = express()
   app.get('/health', (_request, response) => response.json({ status: 'ok', game: 'mosswing-online' }))
+  const accountAuth = attachAccountAuth(app, { databasePath: authDatabasePath })
 
   const httpServer = createServer(app)
   const io = new Server(httpServer, {
@@ -577,9 +580,15 @@ export function createMosswingServer({
   async function stop() {
     if (tickTimer) clearInterval(tickTimer)
     for (const room of rooms.values()) removeRoom(room)
-    await new Promise((resolve, reject) => {
-      io.close((error) => error ? reject(error) : resolve())
-    })
+    try {
+      if (httpServer.listening) {
+        await new Promise((resolve, reject) => {
+          io.close((error) => error ? reject(error) : resolve())
+        })
+      }
+    } finally {
+      accountAuth.close()
+    }
   }
 
   return { app, httpServer, io, rooms, arenaRooms: arenaManager.rooms, start, stop }

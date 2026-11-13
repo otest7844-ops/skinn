@@ -1,0 +1,23 @@
+{
+  "name": "poopbot-svelte",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "svelte": "^5.23.1",
+    "tailwindcss": "^4.1.4",
+    "vite": "^6.3.1",
+    "vite-plugin-svgr": "^4.3.0"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.4"
+  }
+}

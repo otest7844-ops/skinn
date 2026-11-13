@@ -65,9 +65,10 @@ test('creates and joins rooms for every supported arena game, including public C
 
   const games = [
     'tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush',
-    'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'forest-bridge', 'damned-maze', 'princess-race',
+    'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'quiz-arena', 'forest-bridge', 'damned-maze', 'princess-race',
     'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade',
-    'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes',
+    'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes', 'ghasaq', 'counter-siege', 'dashbot',
+    'piaf-plume', 'lave-montante', 'mirror-run',
   ]
   for (const game of games) {
     const host = await connect()
@@ -78,6 +79,79 @@ test('creates and joins rooms for every supported arena game, including public C
       name: 'Hôte',
       isPublic: game === 'cannon-duel',
       stake: game === 'cannon-duel' ? 1 : 0,
+    })
+
+    test('shares Ghasaq cooperative waves and relays the second player’s shots to the host', async (context) => {
+      const { first, second } = await setup(context, 'ghasaq', 20, 0, { ghasaqMode: 'coop' })
+      const firstRunning = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+      const secondRunning = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+      await Promise.all([
+        emitAck(first, 'arena:room:ready', { ready: true }),
+        emitAck(second, 'arena:room:ready', { ready: true }),
+      ])
+      const [hostRoom, guestRoom] = await Promise.all([firstRunning, secondRunning])
+      assert.equal(hostRoom.ghasaqMode, 'coop')
+      assert.equal(guestRoom.gameState.mode, 'coop')
+
+      const sharedEnemies = waitFor(second, 'arena:state', (state) => state.gameState?.enemies?.length === 1)
+      const hostSnapshot = await emitAck(first, 'arena:input', {
+        input: {
+          type: 'snapshot',
+          state: {
+            player: { slot: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0 },
+            enemies: [{ id: 1, kind: 'raider', role: 'rifle', x: 1, y: 0, z: -2, yaw: 0 }],
+            wave: 1,
+            hour: 17,
+            toSpawn: 0,
+          },
+        },
+      })
+      assert.equal(hostSnapshot.ok, true)
+      assert.equal((await sharedEnemies).gameState.enemies[0].id, 1)
+
+      const relayedShot = waitFor(first, 'arena:remote-input', ({ slot, input }) => slot === 1 && input?.type === 'shot')
+      const guestSnapshot = await emitAck(second, 'arena:input', {
+        input: { type: 'snapshot', state: { player: { slot: 1, x: 0, y: 0, z: 5, yaw: 0, pitch: 0 } } },
+      })
+      assert.equal(guestSnapshot.ok, true)
+      const shot = await emitAck(second, 'arena:input', {
+        input: { type: 'shot', weapon: 'rifle', direction: { x: 0, y: 0, z: -1 } },
+      })
+      assert.equal(shot.ok, true)
+      assert.equal((await relayedShot).input.origin.z, 5)
+
+      const damagedGuest = waitFor(second, 'arena:state', (state) => state.gameState?.players?.[1]?.hp < 100)
+      const damage = await emitAck(first, 'arena:input', { input: { type: 'coop-damage', damage: 40 } })
+      assert.equal(damage.ok, true)
+      assert.ok((await damagedGuest).gameState.players[1].hp < 100)
+    })
+
+    test('resolves Ghasaq duel hits and publishes the damaged player state', async (context) => {
+      const { first, second } = await setup(context, 'ghasaq', 20, 0, { ghasaqMode: 'duel' })
+      const firstRunning = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+      const secondRunning = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+      await Promise.all([
+        emitAck(first, 'arena:room:ready', { ready: true }),
+        emitAck(second, 'arena:room:ready', { ready: true }),
+      ])
+      await Promise.all([firstRunning, secondRunning])
+
+      await Promise.all([
+        emitAck(first, 'arena:input', {
+          input: { type: 'snapshot', state: { player: { slot: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0 } } },
+        }),
+        emitAck(second, 'arena:input', {
+          input: { type: 'snapshot', state: { player: { slot: 1, x: 0, y: 0, z: -5, yaw: Math.PI, pitch: 0 } } },
+        }),
+      ])
+      const damagedPlayer = waitFor(second, 'arena:state', (state) => state.gameState?.players?.[1]?.hp < 100)
+      const shot = await emitAck(first, 'arena:input', {
+        input: { type: 'shot', weapon: 'dmr', direction: { x: 0, y: 0, z: -1 } },
+      })
+      assert.equal(shot.ok, true)
+      const state = await damagedPlayer
+      assert.ok(state.gameState.players[1].hp < 100)
+      assert.equal(state.phase, 'running')
     })
     assert.equal(created.ok, true, `${game} room creation`)
     await waitingForHost
@@ -91,6 +165,134 @@ test('creates and joins rooms for every supported arena game, including public C
     })
     assert.equal(joined.ok, true, `${game} room join`)
     assert.equal((await waitingForGuest).yourSlot, 1)
+  }
+})
+
+test('runs Quiz Arena as an online duel with private jokers and server-checked answers', async (context) => {
+  const { server, first, second, created } = await setup(context, 'quiz-arena')
+  const firstStarted = waitFor(first, 'arena:state', (state) => state.game === 'quiz-arena' && state.phase === 'running')
+  const secondStarted = waitFor(second, 'arena:state', (state) => state.game === 'quiz-arena' && state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  const [firstRoom, secondRoom] = await Promise.all([firstStarted, secondStarted])
+  assert.ok(firstRoom.gameState.roundRemainingMs <= 15_000 && firstRoom.gameState.roundRemainingMs > 14_000)
+  assert.equal(firstRoom.gameState.question.prompt, secondRoom.gameState.question.prompt)
+  assert.equal(firstRoom.gameState.question.options.length, 4)
+  assert.equal('correctIndex' in firstRoom.gameState.question, false)
+
+  const hostJoker = waitFor(first, 'arena:state', (state) => state.gameState?.eliminated?.length === 2)
+  const guestJoker = waitFor(second, 'arena:state', (state) => state.gameState?.phase === 'question'
+    && state.gameState?.jokers?.[1] === 3 && state.gameState?.eliminated?.length === 0)
+  assert.equal((await emitAck(first, 'arena:game:action', { type: 'quiz:joker' })).ok, true)
+  assert.equal((await hostJoker).gameState.eliminated.length, 2)
+  assert.deepEqual((await guestJoker).gameState.eliminated, [])
+
+  const state = server.arenaRooms.get(created.code).gameState
+  const correctIndex = state.questions[0].correctIndex
+  const wrongIndex = (correctIndex + 1) % 4
+  const hostWaiting = waitFor(first, 'arena:state', (next) => next.gameState?.submitted?.[0] === true
+    && next.gameState?.phase === 'question')
+  assert.equal((await emitAck(first, 'arena:game:action', { type: 'quiz:answer', answer: correctIndex })).ok, true)
+  const waitingState = await hostWaiting
+  assert.deepEqual(waitingState.gameState.answers, [null, null])
+  assert.deepEqual(waitingState.gameState.results, null)
+
+  const firstReveal = waitFor(first, 'arena:state', (next) => next.gameState?.phase === 'reveal')
+  const secondReveal = waitFor(second, 'arena:state', (next) => next.gameState?.phase === 'reveal')
+  assert.equal((await emitAck(second, 'arena:game:action', { type: 'quiz:answer', answer: wrongIndex })).ok, true)
+  const secondWaiting = await waitFor(second, 'arena:state', (next) => next.gameState?.submitted?.[1] === true
+    && next.gameState?.phase === 'question')
+  assert.deepEqual(secondWaiting.gameState.answers, [null, null])
+  assert.deepEqual(secondWaiting.gameState.results, null)
+  assert.deepEqual(state.scores, [0, 0])
+  state.roundDeadline = Date.now()
+  const [firstResult, secondResult] = await Promise.all([firstReveal, secondReveal])
+  assert.ok(firstResult.gameState.revealRemainingMs <= 5000 && firstResult.gameState.revealRemainingMs > 4800)
+  assert.equal(firstResult.gameState.question.correctIndex, correctIndex)
+  assert.deepEqual(firstResult.gameState.scores, [100, 0])
+  assert.deepEqual(secondResult.gameState.results, [true, false])
+})
+
+test('runs the three supplied games in free online score races', async (context) => {
+  for (const game of ['piaf-plume', 'lave-montante', 'mirror-run']) {
+    const { server, first, second, created } = await setup(context, game)
+    const firstStarted = waitFor(first, 'arena:state', (state) => state.game === game && state.phase === 'running')
+    const secondStarted = waitFor(second, 'arena:state', (state) => state.game === game && state.phase === 'running')
+    await Promise.all([
+      emitAck(first, 'arena:room:ready', { ready: true }),
+      emitAck(second, 'arena:room:ready', { ready: true }),
+    ])
+    const [firstRoom, secondRoom] = await Promise.all([firstStarted, secondStarted])
+    assert.equal(firstRoom.stake, 0)
+    assert.equal(firstRoom.isPublic, false)
+    assert.equal(firstRoom.gameState.status, 'playing')
+
+    const waiting = waitFor(first, 'arena:state', (state) => state.game === game && state.gameState?.scores?.[0] === 120)
+    assert.equal((await emitAck(first, 'arena:input', {
+      input: {
+        progress: 50,
+        score: 120,
+        finished: true,
+        position: { x: 2, y: 10, z: 3 },
+      },
+    })).ok, true)
+    const updatedState = await waiting
+    assert.equal(updatedState.phase, 'running')
+    assert.deepEqual(updatedState.gameState.positions[0], { x: 2, y: 10, z: 3 })
+    const opponentState = waitFor(second, 'arena:state', (state) => state.game === game
+      && state.gameState?.positions?.[0]?.x === 2)
+    assert.deepEqual((await opponentState).gameState.positions[0], { x: 2, y: 10, z: 3 })
+    const finishedState = waitFor(first, 'arena:state', (state) => state.game === game && state.phase === 'finished')
+    assert.equal((await emitAck(second, 'arena:input', {
+      input: { progress: 75, score: 150, finished: true },
+    })).ok, true)
+    const finished = await finishedState
+    assert.equal(finished.gameState.winner, 1)
+    assert.deepEqual(finished.gameState.scores, [120, 150])
+    assert.equal(server.arenaRooms.get(created.code).winnerSlot, 1)
+    assert.equal(secondRoom.game, game)
+  }
+})
+
+test('lists free Lave Montante and Mirror Run rooms for public matchmaking', async (context) => {
+  const server = createMosswingServer({ port: 0 })
+  const address = await server.start()
+  const sockets = []
+  context.after(async () => {
+    sockets.forEach((socket) => socket.disconnect())
+    await server.stop()
+  })
+  async function connect() {
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], reconnection: false })
+    sockets.push(socket)
+    await once(socket, 'connect')
+    return socket
+  }
+
+  for (const game of ['lave-montante', 'mirror-run']) {
+    const host = await connect()
+    const guest = await connect()
+    if (game === 'lave-montante') {
+      const privateGame = await emitAck(host, 'arena:room:create', {
+        game: 'piaf-plume', name: 'Pilote A', walletId: 'public-race-wallet', isPublic: true, stake: 0,
+      })
+      assert.equal(privateGame.ok, false)
+    }
+    const listedRooms = waitFor(host, 'arena:public-rooms', (rooms) => rooms.some((room) => room.game === game))
+    const created = await emitAck(host, 'arena:room:create', {
+      game, name: 'Pilote A', walletId: 'public-race-wallet', isPublic: true, stake: 0,
+    })
+    assert.equal(created.ok, true)
+    const rooms = await listedRooms
+    assert.ok(rooms.some((room) => room.game === game && room.code === created.code && room.stake === 0))
+    const joinedState = waitFor(guest, 'arena:state', (state) => state.code === created.code && state.players.length === 2)
+    const joined = await emitAck(guest, 'arena:room:join', {
+      game, code: created.code, name: 'Pilote B', walletId: 'public-race-wallet', stake: 0,
+    })
+    assert.equal(joined.ok, true)
+    assert.equal((await joinedState).game, game)
   }
 })
 
@@ -142,8 +344,24 @@ test('runs Chemin de couleurs with hidden input path and server-checked tiles', 
   assert.equal(guestState.gameState.progress[0], 1)
   assert.equal((await emitAck(second, 'arena:input', {
     input: { type: 'tile', tile: (sequence[0] + 1) % 25 },
+  })).ok, false)
+  for (const tile of sequence.slice(1)) {
+    room.gameState.lastActionAt[0] = 0
+    assert.equal((await emitAck(first, 'arena:input', {
+      input: { type: 'tile', tile },
+    })).ok, true)
+  }
+  assert.equal(room.gameState.turnSlot, 1)
+  assert.equal(room.gameState.path.length, 10)
+  assert.notDeepEqual(room.gameState.path, sequence)
+  room.gameState.phase = 'input'
+  room.gameState.phaseEndsAt = null
+  room.gameState.inputDeadline = Date.now() + 10_000
+  assert.equal((await emitAck(second, 'arena:input', {
+    input: { type: 'tile', tile: (room.gameState.path[0] + 1) % 25 },
   })).ok, true)
   assert.equal(room.gameState.failed[1], true)
+  assert.equal(room.gameState.status, 'finished')
 })
 
 test('runs Duel de cartes with private hands, alternating turns and a timed reveal', async (context) => {
@@ -1227,4 +1445,90 @@ test('runs Embuscade as a shared timed score duel and rejects impossible reports
   const restarted = await secondRound
   assert.deepEqual(restarted.gameState.scores, [0, 0])
   assert.equal(restarted.gameState.remainingMs, 75_000)
+})
+
+test('relays Counter Siege and DashBot packets between both room players', async (context) => {
+  for (const game of ['counter-siege', 'dashbot']) {
+    const { first, second } = await setup(context, game, 15)
+    const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+    const secondStarted = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+    await Promise.all([
+      emitAck(first, 'arena:room:ready', { ready: true }),
+      emitAck(second, 'arena:room:ready', { ready: true }),
+    ])
+    await Promise.all([firstStarted, secondStarted])
+
+    const hostPacket = waitFor(first, 'arena:remote-input', ({ slot }) => slot === 1)
+    assert.equal((await emitAck(second, 'arena:input', {
+      input: { type: 'action', packet: { action: 'move', x: 1 } },
+    })).ok, true)
+    assert.deepEqual((await hostPacket).input, { type: 'action', packet: { action: 'move', x: 1 } })
+
+    const guestPacket = waitFor(second, 'arena:remote-input', ({ slot }) => slot === 0)
+    assert.equal((await emitAck(first, 'arena:input', {
+      input: { type: 'sync', packet: { player: { x: 3, y: 4 } } },
+    })).ok, true)
+    assert.deepEqual((await guestPacket).input, { type: 'sync', packet: { player: { x: 3, y: 4 } } })
+  }
+})
+
+test('keeps Counter Siege and DashBot rooms private and stake-free', async (context) => {
+  for (const game of ['counter-siege', 'dashbot']) {
+    const server = createMosswingServer({ port: 0 })
+    const address = await server.start()
+    const socket = createSocket(`http://127.0.0.1:${address.port}`, {
+      transports: ['websocket'],
+      reconnection: false,
+    })
+    context.after(async () => {
+      socket.disconnect()
+      await server.stop()
+    })
+    await once(socket, 'connect')
+
+    assert.equal((await emitAck(socket, 'arena:room:create', {
+      game,
+      name: 'Hôte',
+      isPublic: true,
+    })).ok, false)
+    assert.equal((await emitAck(socket, 'arena:room:create', {
+      game,
+      name: 'Hôte',
+      stake: 1,
+    })).ok, false)
+  }
+})
+
+test('shares DashBot host snapshots, finishes with the reported winner, and starts a clean rematch', async (context) => {
+  const { first, second } = await setup(context, 'dashbot', 15)
+  const firstStarted = waitFor(first, 'arena:state', (state) => state.phase === 'running')
+  const secondStarted = waitFor(second, 'arena:state', (state) => state.phase === 'running')
+  await Promise.all([
+    emitAck(first, 'arena:room:ready', { ready: true }),
+    emitAck(second, 'arena:room:ready', { ready: true }),
+  ])
+  await Promise.all([firstStarted, secondStarted])
+
+  const snapshot = {
+    type: 'state',
+    sequence: 1,
+    gameOver: false,
+    winner: null,
+    players: [{ id: 1, x: 1, y: 1 }, { id: 2, x: 2, y: 2 }],
+  }
+  const sharedSnapshot = waitFor(second, 'arena:state', (state) => state.gameState?.sequence === 1)
+  assert.equal((await emitAck(first, 'arena:state', { state: snapshot })).ok, true)
+  assert.deepEqual((await sharedSnapshot).gameState, snapshot)
+
+  const finished = waitFor(second, 'arena:state', (state) => state.phase === 'finished')
+  assert.equal((await emitAck(first, 'arena:state', {
+    state: { ...snapshot, sequence: 2, gameOver: true, winner: 2 },
+  })).ok, true)
+  const finishedRoom = await finished
+  assert.equal(finishedRoom.winnerSlot, 1, JSON.stringify(finishedRoom))
+  assert.equal((await emitAck(first, 'arena:room:rematch')).ok, true)
+  const nextRound = waitFor(first, 'arena:state', (state) => state.phase === 'running' && state.round === 2)
+  assert.equal((await emitAck(second, 'arena:room:rematch')).ok, true)
+  const restarted = await nextRound
+  assert.equal(restarted.gameState, null)
 })

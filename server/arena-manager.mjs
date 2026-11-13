@@ -9,6 +9,13 @@ import {
   WORD_SEARCH_CATEGORIES,
 } from '../shared/word-search.mjs'
 import { createDictationMatch, submitDictationAnswer, tickDictationMatch } from './dictation-game.mjs'
+import {
+  createQuizArenaMatch,
+  quizArenaPlayerSnapshot,
+  submitQuizArenaAnswer,
+  tickQuizArenaMatch,
+  useQuizArenaJoker,
+} from './quiz-arena.mjs'
 import { applyDamnedMazeInput, createDamnedMazeState, tickDamnedMaze } from './damned-maze.mjs'
 import { applyPrincessRaceAction, createPrincessRaceState } from './princess-race.mjs'
 import {
@@ -48,8 +55,29 @@ import {
   tickColorPathMatch,
   tickMotoTaxiMatch,
 } from './supplied-three-games.mjs'
+import {
+  createSuppliedRunMatch,
+  isPublicSuppliedRunGame,
+  isSuppliedRunGame,
+  tickSuppliedRunMatch,
+  updateSuppliedRunMatch,
+} from './supplied-run-games.mjs'
 
-const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade', 'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes'])
+const GAME_IDS = new Set(['tic-tac-toe', 'ping-pong', 'basketball-stars', 'cannon-duel', 'ball-rush', 'football-19', 'head-football', 'tap-tape-arena', 'memo-5x5', 'word-search', 'dictation-duel', 'quiz-arena', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade', 'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes', 'ghasaq', 'counter-siege', 'dashbot', 'piaf-plume', 'lave-montante', 'mirror-run'])
+const GHASAQ_WEAPONS = {
+  rifle: { damage: 34, rpm: 640 },
+  smg: { damage: 29, rpm: 880 },
+  shotgun: { damage: 42, rpm: 85 },
+  dmr: { damage: 92, rpm: 230 },
+  pistol: { damage: 38, rpm: 450 },
+}
+const GHASAQ_CONFIG_VALUES = {
+  map: new Set(['citadel', 'village', 'station']),
+  mode: new Set(['dusk', 'dawn']),
+  diff: new Set(['recruit', 'veteran', 'legend']),
+  primary: new Set(['rifle', 'smg', 'shotgun', 'dmr']),
+  skin: new Set(['std', 'tiger', 'night', 'gold']),
+}
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const TAP_TICK_MS = 50
 const TAP_SNAPSHOT_MS = 100
@@ -79,7 +107,76 @@ function isForestRace(room) {
     || room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon'
     || room.game === 'arena-helice' || room.game === 'duel-de-troncs'
     || room.game === 'moto-taxi-afrique' || room.game === 'chemin-de-couleurs'
-    || room.game === 'duel-de-cartes'
+    || room.game === 'duel-de-cartes' || room.game === 'ghasaq' || isSuppliedRunGame(room.game)
+}
+
+function createGhasaqState(mode) {
+  return {
+    mode,
+    status: 'playing',
+    players: [0, 1].map((slot) => ({
+      slot, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, speed2d: 0, hp: 100, armor: 50, alive: true, present: false,
+    })),
+    enemies: [],
+    wave: 0,
+    toSpawn: 0,
+    hour: 16,
+    startConfig: null,
+    winner: null,
+  }
+}
+
+function finiteIn(value, min, max) {
+  return Number.isFinite(value) && value >= min && value <= max
+}
+
+function sanitizeGhasaqPlayer(value, slot) {
+  if (!value || value.slot !== slot || !finiteIn(value.x, -100, 100) || !finiteIn(value.y, -5, 25)
+    || !finiteIn(value.z, -100, 100) || !finiteIn(value.yaw, -Math.PI * 32, Math.PI * 32)
+    || !finiteIn(value.pitch, -1.6, 1.6)
+    || value.speed2d !== undefined && !finiteIn(value.speed2d, 0, 20)) return null
+  return {
+    x: value.x, y: value.y, z: value.z, yaw: value.yaw, pitch: value.pitch,
+    speed2d: value.speed2d ?? 0,
+  }
+}
+
+function sanitizeGhasaqEnemies(value) {
+  if (!Array.isArray(value) || value.length > 32) return null
+  const result = []
+  for (const enemy of value) {
+    if (!enemy || !Number.isInteger(enemy.id) || enemy.id < 1
+      || !['raider', 'night', 'heavy'].includes(enemy.kind)
+      || !['rifle', 'grenadier', 'sniper'].includes(enemy.role)
+      || !finiteIn(enemy.x, -100, 100) || !finiteIn(enemy.y, -5, 300)
+      || !finiteIn(enemy.z, -100, 100) || !finiteIn(enemy.yaw, -Math.PI * 32, Math.PI * 32)) return null
+    result.push({
+      id: enemy.id, kind: enemy.kind, role: enemy.role,
+      x: enemy.x, y: enemy.y, z: enemy.z, yaw: enemy.yaw,
+    })
+  }
+  return result
+}
+
+function ghasaqConfig(value) {
+  const fields = ['map', 'mode', 'diff', 'primary', 'skin']
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || fields.some((field) => typeof value[field] !== 'string' || !GHASAQ_CONFIG_VALUES[field].has(value[field]))) return null
+  return Object.fromEntries(fields.map((field) => [field, value[field]]))
+}
+
+function ghasaqShotHits(shooter, target, direction) {
+  const origin = { x: shooter.x, y: shooter.y + 1.62, z: shooter.z }
+  const dd = direction.x * direction.x + direction.z * direction.z
+  if (dd < 1e-6) return false
+  const s = ((target.x - origin.x) * direction.x + (target.z - origin.z) * direction.z) / dd
+  if (s < 0 || s > 100) return false
+  const dx = origin.x + direction.x * s - target.x
+  const dz = origin.z + direction.z * s - target.z
+  if (Math.hypot(dx, dz) > 0.42) return false
+  const distance = s - Math.sqrt(Math.max(0, 0.42 ** 2 - dx ** 2 - dz ** 2)) / Math.sqrt(dd)
+  const hitY = origin.y + direction.y * distance
+  return hitY >= target.y + 0.08 && hitY <= target.y + 1.9
 }
 
 function boundedObject(value, maxLength) {
@@ -316,6 +413,7 @@ export function attachArenaManager(io, {
 
   function finishedWinner(room) {
     const state = room.gameState
+    if (room.game === 'dashbot' && (state?.winner === 1 || state?.winner === 2)) return state.winner - 1
     const winner = room.game === 'head-football' ? state?.match?.winner : state?.winner
     if (winner === 0 || winner === 1) return winner
     if (room.game === 'ball-rush' && Array.isArray(state?.players) && state.players.length === 2) {
@@ -413,10 +511,14 @@ export function attachArenaManager(io, {
     } else if (room.game === 'memo-5x5' && gameState) {
       const slot = room.players.findIndex((player) => player.token === recipientToken)
       gameState = memoPlayerSnapshot(gameState, slot)
+    } else if (room.game === 'quiz-arena' && gameState) {
+      const slot = room.players.findIndex((player) => player.token === recipientToken)
+      gameState = quizArenaPlayerSnapshot(gameState, slot)
     }
     return {
       code: room.code,
       game: room.game,
+      ghasaqMode: room.ghasaqMode,
       category: room.wordSearchCategory,
       isPublic: room.isPublic,
       stake: room.stake,
@@ -524,6 +626,7 @@ export function attachArenaManager(io, {
       if (room.game === 'memo-5x5') tickMemoMatch(room.gameState, now)
       else if (room.game === 'word-search') tickWordSearchMatch(room.gameState, now)
       else if (room.game === 'dictation-duel') tickDictationMatch(room.gameState.dictation, now)
+      else if (room.game === 'quiz-arena') tickQuizArenaMatch(room.gameState, now)
       else if (room.game === 'damned-maze') tickDamnedMaze(room.gameState, dt)
       else if (room.game === 'grotte-aux-couteaux') tickKnifeDuel(room.gameState, dt)
       else if (room.game === 'colonnes-du-canyon') tickCanyonRace(room.gameState, dt)
@@ -533,6 +636,7 @@ export function attachArenaManager(io, {
       else if (room.game === 'moto-taxi-afrique') tickMotoTaxiMatch(room.gameState, dt)
       else if (room.game === 'chemin-de-couleurs') tickColorPathMatch(room.gameState, now)
       else if (room.game === 'duel-de-cartes') tickCardDuelMatch(room.gameState, now)
+      else if (isSuppliedRunGame(room.game)) tickSuppliedRunMatch(room.gameState, now)
       else tickAuthoritativeGame(room.gameState, dt)
       if ((room.game === 'grotte-aux-couteaux' || room.game === 'colonnes-du-canyon')
         && room.gameState.status === 'finished') {
@@ -544,6 +648,10 @@ export function attachArenaManager(io, {
         finishForestRoom(room, room.gameState.winner)
         return
       }
+      if (isSuppliedRunGame(room.game) && room.gameState.status === 'finished') {
+        finishForestRoom(room, room.gameState.winner)
+        return
+      }
       if (['moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes'].includes(room.game)
         && room.gameState.status === 'finished') {
         finishForestRoom(room, room.gameState.winner)
@@ -551,6 +659,8 @@ export function attachArenaManager(io, {
       }
       const finished = room.game === 'dictation-duel'
         ? room.gameState.dictation.status === 'finished'
+        : room.game === 'quiz-arena'
+        ? room.gameState.status === 'finished'
         : room.game === 'ping-pong'
         ? room.gameState.state === 'over'
         : room.game === 'forest-bridge' || room.game === 'princess-race'
@@ -562,7 +672,7 @@ export function attachArenaManager(io, {
         stopGameTimer(room)
         if (room.game === 'damned-maze') scheduleMazeFinishedExpiry(room)
       }
-      const broadcastInterval = room.game === 'arena-helice' ? 33 : room.game === 'embuscade' ? 250 : 50
+      const broadcastInterval = room.game === 'arena-helice' ? 33 : room.game === 'embuscade' ? 250 : room.game === 'quiz-arena' ? 100 : 50
       if (now - room.lastGameBroadcastAt >= broadcastInterval || finished) {
         room.lastGameBroadcastAt = now
         broadcast(room)
@@ -588,11 +698,12 @@ export function attachArenaManager(io, {
     io.to(room.code).emit('arena:closed', { reason })
   }
 
-  function makeRoom(game, players, { isPublic = false, stake = 0, wordSearchCategory = '*' } = {}) {
+  function makeRoom(game, players, { isPublic = false, stake = 0, wordSearchCategory = '*', ghasaqMode = 'coop' } = {}) {
     const code = makeCode()
     const room = {
       code,
       game,
+      ghasaqMode,
       wordSearchCategory,
       isPublic,
       stake,
@@ -613,7 +724,11 @@ export function attachArenaManager(io, {
       lastGameBroadcastAt: 0,
       pausedAt: null,
       pausedFrom: null,
-      gameState: game === 'tic-tac-toe'
+      gameState: game === 'ghasaq'
+        ? createGhasaqState(ghasaqMode)
+        : game === 'counter-siege' || game === 'dashbot'
+          ? null
+        : game === 'tic-tac-toe'
         ? { board: Array(9).fill(0), turn: 0, scores: [0, 0], winner: null }
         : game === 'ball-rush'
           ? { players: [null, null] }
@@ -722,6 +837,9 @@ export function attachArenaManager(io, {
     } else if (room.game === 'dictation-duel') {
       room.gameState = { dictation: createDictationMatch(room.seed), scores: [0, 0] }
       startAuthoritativeTimer(room)
+    } else if (room.game === 'quiz-arena') {
+      room.gameState = createQuizArenaMatch(room.seed)
+      startAuthoritativeTimer(room)
     } else if (room.game === 'damned-maze') {
       room.gameState = createDamnedMazeState(room.seed)
       startAuthoritativeTimer(room)
@@ -739,6 +857,9 @@ export function attachArenaManager(io, {
     } else if (room.game === 'duel-de-troncs') {
       room.gameState = createTrunkDuelState(room.seed)
       startAuthoritativeTimer(room)
+    } else if (isSuppliedRunGame(room.game)) {
+      room.gameState = createSuppliedRunMatch(room.game)
+      startAuthoritativeTimer(room)
     } else if (room.game === 'chess-3d') {
       room.gameState = createChessDuelState()
     } else if (room.game === 'embuscade') {
@@ -753,6 +874,10 @@ export function attachArenaManager(io, {
     } else if (room.game === 'duel-de-cartes') {
       room.gameState = createCardDuelMatch(room.seed)
       startAuthoritativeTimer(room)
+    } else if (room.game === 'ghasaq') {
+      room.gameState = createGhasaqState(room.ghasaqMode)
+    } else if (room.game === 'counter-siege' || room.game === 'dashbot') {
+      room.gameState = null
     } else if (room.game === 'ping-pong' || room.game === 'basketball-stars' || room.game === 'cannon-duel' || room.game === 'forest-bridge') {
       room.gameState = createAuthoritativeGame(room.game, room.seed)
       startAuthoritativeTimer(room)
@@ -801,8 +926,16 @@ export function attachArenaManager(io, {
       if (!Number.isSafeInteger(stake) || stake < 0 || stake > 1_000_000) {
         return callback?.({ ok: false, error: 'La mise de démonstration est invalide.' })
       }
-      if (payload?.isPublic === true && stake < 1) {
+      if (payload?.isPublic === true && stake < 1 && !isPublicSuppliedRunGame(payload?.game)) {
         return callback?.({ ok: false, error: 'Un salon public doit avoir une mise de démonstration positive.' })
+      }
+      if (['ghasaq', 'counter-siege', 'dashbot'].includes(payload?.game)
+        && (stake !== 0 || payload?.isPublic === true)) {
+        return callback?.({ ok: false, error: 'Les salons de ce jeu ne prennent pas de mise et restent privés.' })
+      }
+      if (isSuppliedRunGame(payload?.game)
+        && (stake !== 0 || payload?.isPublic === true && !isPublicSuppliedRunGame(payload?.game))) {
+        return callback?.({ ok: false, error: 'Les courses gratuites ne prennent pas de mise.' })
       }
       const player = createPlayer(socket, 0, payload?.name, payload?.walletId)
       if (!reserveDemoStake(player, stake)) {
@@ -812,10 +945,17 @@ export function attachArenaManager(io, {
         && (payload?.category === '*' || Object.hasOwn(WORD_SEARCH_CATEGORIES, payload?.category))
         ? payload.category
         : '*'
+      const ghasaqMode = payload?.game === 'ghasaq'
+        ? payload?.ghasaqMode === undefined ? 'coop' : payload?.ghasaqMode
+        : 'coop'
+      if (!['coop', 'duel'].includes(ghasaqMode)) {
+        return callback?.({ ok: false, error: 'Le mode multijoueur de Ghasaq est invalide.' })
+      }
       const room = makeRoom(payload.game, [player], {
         isPublic: payload?.isPublic === true,
         stake,
         wordSearchCategory,
+        ghasaqMode,
       })
       acknowledge(socket, callback, room, player)
     })
@@ -885,6 +1025,10 @@ export function attachArenaManager(io, {
         room.players.forEach((item) => {
           if (item.lastActionAt) item.lastActionAt += pauseDuration
         })
+        if (room.game === 'quiz-arena' && room.gameState) {
+          if (room.gameState.roundDeadline !== null) room.gameState.roundDeadline += pauseDuration
+          if (room.gameState.revealEndsAt !== null) room.gameState.revealEndsAt += pauseDuration
+        }
         room.pausedAt = null
         if (isForestRace(room) && room.players.length === 1) scheduleForestWaitingExpiry(room)
         if (room.pausedFrom === 'countdown') {
@@ -981,7 +1125,7 @@ export function attachArenaManager(io, {
           room.players.forEach((entry) => { entry.ready = false })
         }
       } else if (['ping-pong', 'basketball-stars', 'cannon-duel'].includes(room.game)) {
-        const input = boundedObject(payload?.input, 2048)
+        const input = boundedObject(payload?.input, room?.game === 'ghasaq' ? 12_000 : 2048)
         if (!input || !applyAuthoritativeInput(room.gameState, player.slot, input)) {
           return callback?.({ ok: false, error: 'Action invalide ou non autorisée pour cette manche.' })
         }
@@ -1017,6 +1161,12 @@ export function attachArenaManager(io, {
           room.players.forEach((entry) => { entry.ready = false })
           stopGameTimer(room)
         }
+      } else if (room.game === 'quiz-arena' && payload?.type === 'quiz:answer') {
+        const result = submitQuizArenaAnswer(room.gameState, player.slot, payload.answer)
+        if (!result.ok) return callback?.(result)
+      } else if (room.game === 'quiz-arena' && payload?.type === 'quiz:joker') {
+        const result = useQuizArenaJoker(room.gameState, player.slot)
+        if (!result.ok) return callback?.(result)
       } else if (room.game === 'tap-tape-arena' && payload?.type === 'tap') {
         const now = Date.now()
         if (now - player.lastActionAt < 65) {
@@ -1085,6 +1235,19 @@ export function attachArenaManager(io, {
           room.players.forEach((entry) => { entry.ready = false })
           stopGameTimer(room)
         }
+      } else if (room.game === 'dashbot') {
+        if (player.slot !== 0 || state.type !== 'state'
+          || !Array.isArray(state.players) || state.players.length !== 2
+          || typeof state.gameOver !== 'boolean'
+          || state.winner !== null && state.winner !== 1 && state.winner !== 2) {
+          return callback?.({ ok: false, error: 'État DashBot invalide ou non autorisé.' })
+        }
+        room.gameState = state
+        if (state.gameOver) {
+          room.phase = 'finished'
+          room.winnerSlot = state.winner === null ? null : state.winner - 1
+          room.players.forEach((entry) => { entry.ready = false })
+        }
       } else if (room.game === 'embuscade') {
         const result = updateSniperDuelScore(room.gameState, player.slot, state)
         if (!result.ok) return callback?.(result)
@@ -1107,7 +1270,7 @@ export function attachArenaManager(io, {
     socket.on('arena:room:finish', (_payload, callback) => {
       const entry = lookup(socket)
       if (!entry || entry.room.phase !== 'running' || entry.player.slot !== 0
-      || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade'].includes(entry.room.game)) {
+      || ['ball-rush', 'ping-pong', 'basketball-stars', 'head-football', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade', 'ghasaq'].includes(entry.room.game)) {
         return callback?.({ ok: false, error: 'Cette manche ne peut pas être terminée par ce joueur.' })
       }
       entry.room.phase = 'finished'
@@ -1119,9 +1282,17 @@ export function attachArenaManager(io, {
     socket.on('arena:input', (payload, callback) => {
       const entry = lookup(socket)
       const { room, player } = entry ?? {}
-      const input = boundedObject(payload?.input, 2048)
+      const input = boundedObject(payload?.input, room?.game === 'ghasaq' ? 12_000 : 2048)
       if (!room || room.phase !== 'running' || room.game === 'tic-tac-toe' || !input) {
         return callback?.({ ok: false, error: 'Entrée de jeu non autorisée ou invalide.' })
+      }
+      if (isSuppliedRunGame(room.game)) {
+        const result = updateSuppliedRunMatch(room.gameState, player.slot, input)
+        if (!result.ok) return callback?.(result)
+        if (room.gameState.status === 'finished') finishForestRoom(room, room.gameState.winner)
+        else broadcast(room)
+        callback?.({ ok: true })
+        return
       }
       if (room.game === 'chess-3d') {
         const result = submitChessMove(room.gameState, player.slot, input.from, input.to)
@@ -1232,6 +1403,137 @@ export function attachArenaManager(io, {
         callback?.({ ok: true })
         return
       }
+      if (room.game === 'ghasaq') {
+        const state = room.gameState
+        if (input.type === 'start') {
+          const config = player.slot === 0 && !state.startConfig ? ghasaqConfig(input.config) : null
+          if (!config) return callback?.({ ok: false, error: 'Seul l’hôte peut lancer une configuration Ghasaq valide.' })
+          state.startConfig = config
+          broadcast(room)
+          callback?.({ ok: true })
+          return
+        }
+        if (input.type === 'finish') {
+          if (player.slot !== 0 || state.mode !== 'coop') {
+            return callback?.({ ok: false, error: 'Seul l’hôte peut terminer cette mission coopérative.' })
+          }
+          finishForestRoom(room, null)
+          callback?.({ ok: true })
+          return
+        }
+        if (input.type === 'coop-damage') {
+          const target = state.players[1]
+          if (state.mode !== 'coop' || player.slot !== 0 || !target.present || !target.alive
+            || !finiteIn(input.damage, 0.1, 60)) {
+            return callback?.({ ok: false, error: 'Dégâts coopératifs invalides.' })
+          }
+          const absorbed = Math.min(target.armor, input.damage * 0.5)
+          target.armor -= absorbed
+          target.hp = Math.max(0, target.hp - (input.damage - absorbed))
+          if (target.hp === 0) target.alive = false
+          broadcast(room)
+          callback?.({ ok: true })
+          return
+        }
+        if (input.type === 'snapshot') {
+          const nextPlayer = sanitizeGhasaqPlayer(input.state?.player, player.slot)
+          if (!nextPlayer || !state.players) return callback?.({ ok: false, error: 'Position ou état joueur invalide.' })
+          const now = Date.now()
+          const previous = state.players[player.slot]
+          const elapsed = previous.present ? now - previous.updatedAt : Number.POSITIVE_INFINITY
+          if (previous.present && (elapsed < 35
+            || Math.hypot(nextPlayer.x - previous.x, nextPlayer.y - previous.y, nextPlayer.z - previous.z) > 1.5 + elapsed * 0.018)) {
+            return callback?.({ ok: false, error: 'Déplacement réseau trop rapide.' })
+          }
+          Object.assign(previous, nextPlayer, { present: true, updatedAt: now })
+          if (state.mode === 'duel') {
+            if (input.state.player.alive !== undefined && typeof input.state.player.alive !== 'boolean') {
+              return callback?.({ ok: false, error: 'État de joueur invalide.' })
+            }
+          } else if (player.slot === 0) {
+            const enemies = sanitizeGhasaqEnemies(input.state.enemies)
+            if (!enemies || !finiteIn(input.state.wave, 0, 100) || !finiteIn(input.state.hour, 0, 48)
+              || !finiteIn(input.state.toSpawn, 0, 500)) {
+              return callback?.({ ok: false, error: 'État coopératif invalide.' })
+            }
+            state.enemies = enemies
+            state.wave = input.state.wave
+            state.hour = input.state.hour
+            state.toSpawn = input.state.toSpawn
+            if (input.state.finished === true) {
+              finishForestRoom(room, null)
+              callback?.({ ok: true })
+              return
+            }
+          }
+          broadcast(room)
+          callback?.({ ok: true })
+          return
+        }
+        if (input.type === 'shot') {
+          const weapon = GHASAQ_WEAPONS[input.weapon]
+          const direction = input.direction
+          const length = direction && Math.hypot(direction.x, direction.y, direction.z)
+          const shooter = state.players[player.slot]
+          const opponent = state.players[1 - player.slot]
+          if (!weapon || !shooter.present || !shooter.alive || !opponent.present
+            || !direction || !finiteIn(direction.x, -1, 1) || !finiteIn(direction.y, -1, 1)
+            || !finiteIn(direction.z, -1, 1) || !Number.isFinite(length) || Math.abs(length - 1) > 0.08) {
+            return callback?.({ ok: false, error: 'Tir invalide ou joueur indisponible.' })
+          }
+          const shotDirection = { x: direction.x / length, y: direction.y / length, z: direction.z / length }
+          const expected = {
+            x: -Math.sin(shooter.yaw) * Math.cos(shooter.pitch),
+            y: Math.sin(shooter.pitch),
+            z: -Math.cos(shooter.yaw) * Math.cos(shooter.pitch),
+          }
+          const aim = shotDirection.x * expected.x + shotDirection.y * expected.y + shotDirection.z * expected.z
+          const now = Date.now()
+          if (aim < 0.72 || now - (player.lastShotAt ?? 0) < 60_000 / weapon.rpm * 0.72) {
+            return callback?.({ ok: false, error: 'Tir trop rapide ou visée incohérente.' })
+          }
+          player.lastShotAt = now
+          if (state.mode === 'coop') {
+            if (player.slot !== 1) return callback?.({ ok: false, error: 'Le tir coopératif n’est pas autorisé pour cet emplacement.' })
+            const host = room.players[0]
+            if (host?.connected && host.socketId) {
+              io.to(host.socketId).emit('arena:remote-input', {
+                slot: player.slot,
+                input: {
+                  type: 'shot',
+                  weapon: input.weapon,
+                  origin: { x: shooter.x, y: shooter.y + 1.62, z: shooter.z },
+                  direction: shotDirection,
+                },
+              })
+            }
+          } else if (ghasaqShotHits(shooter, opponent, shotDirection)) {
+            const damage = weapon.damage
+            const absorbed = Math.min(opponent.armor, damage * 0.5)
+            opponent.armor -= absorbed
+            opponent.hp = Math.max(0, opponent.hp - (damage - absorbed))
+            if (opponent.hp === 0) {
+              opponent.alive = false
+              state.winner = player.slot
+              finishForestRoom(room, player.slot)
+              callback?.({ ok: true })
+              return
+            }
+          }
+          broadcast(room)
+          callback?.({ ok: true })
+          return
+        }
+        return callback?.({ ok: false, error: 'Action Ghasaq non reconnue.' })
+      }
+      if (room.game === 'counter-siege' || room.game === 'dashbot') {
+        const opponent = room.players.find((item) => item.slot !== player.slot)
+        if (opponent?.connected && opponent.socketId) {
+          io.to(opponent.socketId).emit('arena:remote-input', { slot: player.slot, input })
+        }
+        callback?.({ ok: true })
+        return
+      }
       const recipient = room.players.find((item) => item.slot === 0)
       if (recipient?.socketId) {
         io.to(recipient.socketId).emit('arena:remote-input', { slot: player.slot, input })
@@ -1276,8 +1578,14 @@ export function attachArenaManager(io, {
           })
         } else if (entry.room.game === 'tap-tape-arena') {
           entry.room.gameState = { scores: [0, 0], winner: null }
+        } else if (entry.room.game === 'quiz-arena') {
+          entry.room.gameState = null
         } else if (entry.room.game === 'damned-maze' || entry.room.game === 'princess-race'
           || entry.room.game === 'grotte-aux-couteaux' || entry.room.game === 'colonnes-du-canyon') {
+          entry.room.gameState = null
+        } else if (entry.room.game === 'ghasaq') {
+          entry.room.gameState = createGhasaqState(entry.room.ghasaqMode)
+        } else if (entry.room.game === 'counter-siege' || entry.room.game === 'dashbot') {
           entry.room.gameState = null
         }
       }

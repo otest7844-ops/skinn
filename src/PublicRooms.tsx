@@ -4,6 +4,7 @@ import { Gamepad2, Users } from 'lucide-react'
 import { getMultiplayerUrl } from './multiplayer-url'
 import { getDemoWalletId } from './demo-wallet'
 import { getResponsiveImageProps, hideBrokenImage } from './responsive-image'
+import { useLocalization } from './useLocalization'
 
 export type PublicRoom = {
   code: string
@@ -25,7 +26,7 @@ const TITLES: Record<string, string> = {
   'memo-5x5': 'Mémo 5×5',
   'word-search': 'Chasse aux mots',
   'dictation-duel': 'Dictée Éclair',
-  'mosswing-online': 'Mosswing Online',
+  'quiz-arena': 'Quiz Arène',
   'forest-bridge': 'Pont de la forêt 3D',
   'damned-maze': 'Le Labyrinthe des Damnés',
   'princess-race': 'La Course vers la Princesse',
@@ -38,6 +39,8 @@ const TITLES: Record<string, string> = {
   'moto-taxi-afrique': 'Moto Taxi Afrique',
   'chemin-de-couleurs': 'Chemin de couleurs 3D',
   'duel-de-cartes': 'Duel de cartes 3D',
+  'lave-montante': 'Lave Montante',
+  'mirror-run': 'Mirror Run',
 }
 
 const IMAGES: Record<string, string> = {
@@ -51,7 +54,7 @@ const IMAGES: Record<string, string> = {
   'memo-5x5': '/images/memo-5x5.jpg',
   'word-search': '/images/game-word-search.jpg',
   'dictation-duel': '/images/dictee-eclair.jpg',
-  'mosswing-online': '/images/mosswing-online.jpg',
+  'quiz-arena': '/images/quiz-arena.jpg',
   'forest-bridge': '/images/forest-bridge.jpg',
   'damned-maze': '/images/damned-maze.jpg',
   'princess-race': '/images/princess-race.jpg',
@@ -64,6 +67,8 @@ const IMAGES: Record<string, string> = {
   'moto-taxi-afrique': '/images/moto-taxi-afrique.jpg',
   'chemin-de-couleurs': '/images/chemin-de-couleurs.jpg',
   'duel-de-cartes': '/images/duel-de-cartes.jpg',
+  'lave-montante': '/images/lave-montante.svg',
+  'mirror-run': '/images/mirror-run.svg',
 }
 
 export default function PublicRooms({
@@ -73,25 +78,21 @@ export default function PublicRooms({
   onJoin: (room: PublicRoom) => void
   onWalletBalance: (balance: number) => void
 }) {
+  const { t, formatAmount } = useLocalization()
   const [arenaRooms, setArenaRooms] = useState<PublicRoom[]>([])
-  const [mosswingRooms, setMosswingRooms] = useState<PublicRoom[]>([])
   const [connected, setConnected] = useState(false)
-  const rooms = [...arenaRooms, ...mosswingRooms]
+  const rooms = arenaRooms
 
   useEffect(() => {
     const socket = io(getMultiplayerUrl(), { reconnection: true, reconnectionAttempts: 8, timeout: 8000 })
     socket.on('connect', () => {
       setConnected(true)
       socket.emit('arena:public-rooms:request')
-      socket.emit('mosswing:public-rooms:request')
       socket.emit('arena:demo-wallet:request', { walletId: getDemoWalletId() })
     })
     socket.on('disconnect', () => setConnected(false))
     socket.on('arena:public-rooms', (next: PublicRoom[]) => {
       setArenaRooms(next.filter((room) => TITLES[room.game]))
-    })
-    socket.on('mosswing:public-rooms', (next: PublicRoom[]) => {
-      setMosswingRooms(next.filter((room) => TITLES[room.game]))
     })
     socket.on('arena:demo-wallet', (wallet: { balance: number }) => {
       if (Number.isFinite(wallet?.balance)) onWalletBalance(wallet.balance)
@@ -107,15 +108,15 @@ export default function PublicRooms({
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-1.5 text-sm font-black">
           <Users size={15} className="text-pink-400" />
-          Salons ouverts
+          {t('rooms.open')}
         </h2>
         <span className="text-[10px] font-semibold text-slate-400">
-          {connected ? `${rooms.length} disponible${rooms.length === 1 ? '' : 's'}` : 'Connexion…'}
+          {connected ? `${rooms.length} ${t('rooms.available')}` : t('rooms.connecting')}
         </span>
       </div>
       {rooms.length === 0 ? (
         <p className="rounded-2xl border border-pink-400/20 bg-pink-500/5 p-3 text-center text-xs text-slate-400">
-          Aucun salon public ouvert pour le moment.
+          {t('rooms.none')}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -137,7 +138,7 @@ export default function PublicRooms({
               <div className="min-w-0 flex-1">
                 <strong className="block truncate text-xs">{TITLES[room.game]}</strong>
                 <span className="block truncate text-[10px] text-slate-400">
-                  {room.host} · Code {room.code} · Mise démo {room.stake.toLocaleString('fr-FR')} crédits
+                  {room.host} · Code {room.code} · {room.stake === 0 ? 'Gratuit' : `${t('rooms.demoStake')} ${formatAmount(room.stake)}`}
                 </span>
               </div>
               <button
@@ -145,13 +146,13 @@ export default function PublicRooms({
                 onClick={() => onJoin(room)}
                 className="shrink-0 rounded-xl bg-pink-500 px-3 py-2 text-[10px] font-black text-white hover:bg-pink-600"
               >
-                Participer
+                {t('rooms.join')}
               </button>
             </article>
           ))}
         </div>
       )}
-      <p className="text-[9px] text-slate-500">Mises et gains en crédits de démonstration uniquement.</p>
+      <p className="text-[9px] text-slate-500">{t('rooms.demoOnly')}</p>
     </section>
   )
 }

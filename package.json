@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview --host 0.0.0.0",
     "server": "node server/server.mjs",
-    "test:server": "node --test server/*.test.mjs"
+    "test:server": "node --test server/*.test.mjs",
+    "build:ghasaq": "npm run build --prefix games/ghasaq"
   },
   "dependencies": {
     "@types/three": "^0.187.0",

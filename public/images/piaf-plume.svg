@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 420">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#173b51"/>
+      <stop offset=".58" stop-color="#2b8294"/>
+      <stop offset="1" stop-color="#102a3c"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop stop-color="#ffe89a" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#ffe89a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="360" height="420" rx="32" fill="url(#sky)"/>
+  <circle cx="277" cy="87" r="95" fill="url(#glow)"/>
+  <path d="M0 300c63-47 117-37 179 0s116 42 181 2v118H0z" fill="#28725f"/>
+  <path d="M0 347c73-30 118 12 183 23s116-7 177-36v86H0z" fill="#174c47"/>
+  <g stroke="#82cd76" stroke-linecap="round">
+    <path d="M61 355V197m0 76 25-35m-25 76-25-37M298 365V170m0 62-27-38m27 96 24-37" fill="none" stroke-width="10"/>
+    <path d="M42 234l19 15m-38 31 38 3m258-89-21 12m41 35-41 4" fill="none" stroke-width="5"/>
+  </g>
+  <g transform="translate(178 203)">
+    <path d="M-50 13c4-26 35-42 68-30 21 7 28 26 12 41-18 17-64 19-80-11Z" fill="#35a7c0"/>
+    <path d="M-17 1c2-42 24-66 46-78 13 32 7 66-17 89" fill="#85d6d1" stroke="#eef7f1" stroke-width="4"/>
+    <path d="M-12 8c14-23 27-38 42-49M-35 17c-18 9-30 12-45 13" fill="none" stroke="#eef7f1" stroke-linecap="round" stroke-width="4"/>
+    <path d="m18-4 23 5-22 8" fill="#ffc93c"/>
+    <circle cx="13" cy="-3" r="5" fill="#12283d"/>
+    <circle cx="14" cy="-4" r="1.5" fill="#fff"/>
+  </g>
+  <g fill="#ffc93c" stroke="#fff1ba" stroke-width="2">
+    <circle cx="112" cy="151" r="10"/><circle cx="264" cy="269" r="8"/>
+  </g>
+  <text x="180" y="384" fill="#eef7f1" font-family="system-ui,sans-serif" font-size="29" font-weight="700" text-anchor="middle">PIAF PLUME</text>
+</svg>

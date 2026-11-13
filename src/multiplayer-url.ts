@@ -4,3 +4,7 @@ export function getMultiplayerUrl() {
   if (/^https?:\/\//i.test(configuredUrl)) return configuredUrl
   return `${window.location.protocol}//${configuredUrl}`
 }
+
+export function getAuthApiBaseUrl() {
+  return import.meta.env.DEV ? '' : getMultiplayerUrl()
+}

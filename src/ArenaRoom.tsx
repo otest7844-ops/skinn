@@ -8,8 +8,9 @@ import { getDemoWalletId } from './demo-wallet'
 import GameControlsGuide from './GameControlsGuide'
 import { HEAD_FOOTBALL_CLUBS, HEAD_FOOTBALL_PLAYERS, type HeadFootballSelection } from './head-football-data'
 import { WORD_SEARCH_CATEGORIES } from '../shared/word-search.mjs'
+import { useLocalization } from './useLocalization'
 
-export type OnlineGame = 'football-19' | 'head-football' | 'tap-tape-arena' | 'memo-5x5' | 'word-search' | 'dictation-duel'
+export type OnlineGame = 'football-19' | 'head-football' | 'tap-tape-arena' | 'memo-5x5' | 'word-search' | 'dictation-duel' | 'quiz-arena'
 type Player = { slot: number; you: boolean; name: string; connected: boolean; ready: boolean }
 export type HeadFootballMatch = {
   status: 'count' | 'play' | 'goal' | 'finished'
@@ -68,6 +69,21 @@ export type ArenaRoomView = {
       lastResult: { round: number; winnerSlot: number | null; correct: boolean; elapsedMs: number } | null
       winner: number | null
     }
+    question?: {
+      prompt: string
+      category: string
+      options: string[]
+      correctIndex?: number
+    } | null
+    phase?: string
+    round?: number
+    jokers?: number[]
+    submitted?: boolean[]
+    answers?: Array<number | null>
+    results?: Array<boolean | null> | null
+    eliminated?: number[]
+    roundRemainingMs?: number
+    revealRemainingMs?: number
   } | null
   yourSlot: number
   stake?: number
@@ -95,6 +111,8 @@ export default function ArenaRoom({
   publicJoin?: { game: string; code: string; stake: number } | null
   onWalletBalance?: (balance: number) => void
 }) {
+  const { t, formatAmount, gameTitle } = useLocalization()
+  const localizedTitle = gameTitle(game, title)
   const [view, setView] = useState<'home' | 'join' | 'lobby' | 'playing' | 'solo' | 'local'>('home')
   const [room, setRoom] = useState<ArenaRoomView | null>(null)
   const [name, setName] = useState('')
@@ -258,13 +276,13 @@ export default function ArenaRoom({
 
   if (view === 'playing' || view === 'solo' || view === 'local') {
     return (
-      <section className="arcade-online-screen" aria-label={title}>
+      <section className="arcade-online-screen" aria-label={localizedTitle}>
         <header className="arcade-game-topbar">
-          <button type="button" className="arcade-back-button" onClick={exitGame}><ArrowLeft size={17} /> Quitter</button>
-          <div className="arcade-match-label">{title}{room ? ` · SALLE ${room.code}` : view === 'local' ? ' · LOCAL' : ' · SOLO'}</div>
+          <button type="button" className="arcade-back-button" onClick={exitGame}><ArrowLeft size={17} /> {t('lobby.quit')}</button>
+          <div className="arcade-match-label">{localizedTitle}{room ? ` · ${t('lobby.duelRoom').toLocaleUpperCase()} ${room.code}` : view === 'local' ? ' · LOCAL' : ' · SOLO'}</div>
           {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
         </header>
-        {room?.phase === 'paused' && <div className="arcade-disconnect-notice">Connexion interrompue — reconnexion en cours.</div>}
+        {room?.phase === 'paused' && <div className="arcade-disconnect-notice">{t('lobby.reconnecting')}</div>}
         {renderGame({
           room: view === 'solo' || view === 'local' ? null : room,
           local: view === 'local',
@@ -281,48 +299,48 @@ export default function ArenaRoom({
     <div className="arcade-online-screen">
       <div className="arcade-lobby">
         <header className="arcade-lobby-header">
-          <button type="button" className="arcade-back-button" onClick={room ? leaveRoom : onClose}><ArrowLeft size={17} /> Retour</button>
-          <span>{title} · DUEL EN LIGNE</span>
-          <span className={`arcade-connection ${connected ? 'is-connected' : ''}`}>{connected ? <Wifi size={16} /> : <WifiOff size={16} />} {connected ? 'Connecté' : 'Hors ligne'}</span>
+          <button type="button" className="arcade-back-button" onClick={room ? leaveRoom : onClose}><ArrowLeft size={17} /> {t('lobby.return')}</button>
+          <span>{localizedTitle} · DUEL EN LIGNE</span>
+          <span className={`arcade-connection ${connected ? 'is-connected' : ''}`}>{connected ? <Wifi size={16} /> : <WifiOff size={16} />} {connected ? t('lobby.online') : t('lobby.offline')}</span>
         </header>
         <main className="arcade-lobby-card">
           <span className="arcade-lobby-eyebrow"><Users size={15} /> 1 CONTRE 1 · EN LIGNE</span>
-          <h1>{room ? 'Salon de duel' : 'Jouez à deux'}</h1>
+          <h1>{room ? t('lobby.duelRoom') : t('lobby.playTogether')}</h1>
           <GameControlsGuide
             game={game}
             playerSlot={room ? room.yourSlot === 1 ? 1 : 0 : null}
           />
           {!room ? <>
-            <label className="arcade-field">Votre pseudo<input value={name} maxLength={18} onChange={(event) => setName(event.target.value)} placeholder="Joueur" /></label>
-            <button type="button" className="arcade-secondary-button" onClick={() => setView('solo')}>Jouer en solo</button>
-            {(game === 'head-football' || game === 'memo-5x5' || game === 'word-search') && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>Mode local · 2 joueurs</button>}
+            <label className="arcade-field">{t('lobby.nickname')}<input value={name} maxLength={18} onChange={(event) => setName(event.target.value)} placeholder={t('lobby.player')} /></label>
+            <button type="button" className="arcade-secondary-button" onClick={() => setView('solo')}>{t('lobby.solo')}</button>
+            {(game === 'head-football' || game === 'memo-5x5' || game === 'word-search') && <button type="button" className="arcade-secondary-button" onClick={() => setView('local')}>{t('lobby.local')}</button>}
             {game === 'word-search' && <label className="arcade-field">Catégorie de la grille
               <select value={wordSearchCategory} onChange={(event) => setWordSearchCategory(event.target.value)}>
-                <option value="*">Mixte</option>
+                <option value="*">{t('lobby.mixed')}</option>
                 {Object.keys(WORD_SEARCH_CATEGORIES).map((category) => <option key={category}>{category}</option>)}
               </select>
             </label>}
-            <label className="arcade-field">Mise en crédits démo<input type="number" min="1" max="1000000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} /></label>
-            <label className="arcade-public-toggle"><input type="checkbox" checked={publicRoom} onChange={(event) => setPublicRoom(event.target.checked)} /> Afficher mon salon sur l’accueil</label>
-            <button type="button" className="arcade-primary-button" disabled={!connected} onClick={createRoom}>Créer une salle</button>
-            <button type="button" className="arcade-secondary-button" disabled={!connected} onClick={() => setView('join')}>Rejoindre une salle</button>
+            <label className="arcade-field">{t('lobby.demoStake')}<input type="number" min="1" max="1000000" step="1" value={stake} onChange={(event) => setStake(event.target.value)} /></label>
+            <label className="arcade-public-toggle"><input type="checkbox" checked={publicRoom} onChange={(event) => setPublicRoom(event.target.checked)} /> {t('lobby.public')}</label>
+            <button type="button" className="arcade-primary-button" disabled={!connected} onClick={createRoom}>{t('lobby.create')}</button>
+            <button type="button" className="arcade-secondary-button" disabled={!connected} onClick={() => setView('join')}>{t('lobby.joinRoom')}</button>
             {view === 'join' && <form className="arcade-join-form" onSubmit={joinRoom}>
-              <label className="arcade-field">Code de la salle<input value={codeInput} maxLength={6} onChange={(event) => setCodeInput(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="ABC123" /></label>
-              <label className="arcade-field">Mise identique en crédits démo<input type="number" min="0" max="1000000" step="1" value={joinStake} onChange={(event) => setJoinStake(event.target.value)} /></label>
-              <button type="submit" className="arcade-primary-button" disabled={!connected || codeInput.length !== 6}>Rejoindre</button>
+              <label className="arcade-field">{t('lobby.roomCode')}<input value={codeInput} maxLength={6} onChange={(event) => setCodeInput(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="ABC123" /></label>
+              <label className="arcade-field">{t('lobby.sameStake')}<input type="number" min="0" max="1000000" step="1" value={joinStake} onChange={(event) => setJoinStake(event.target.value)} /></label>
+              <button type="submit" className="arcade-primary-button" disabled={!connected || codeInput.length !== 6}>{t('lobby.joinRoom')}</button>
             </form>}
           </> : <>
-            <div className="arcade-room-code"><strong>{room.code}</strong><button type="button" onClick={() => void copyCode()}>{copied ? <Check size={17} /> : <Clipboard size={17} />}{copied ? 'Copié' : 'Copier'}</button></div>
+            <div className="arcade-room-code"><strong>{room.code}</strong><button type="button" onClick={() => void copyCode()}>{copied ? <Check size={17} /> : <Clipboard size={17} />}{copied ? t('lobby.copied') : t('lobby.copy')}</button></div>
             <p className="arcade-lobby-hint">
-              {room.isPublic ? 'Salon public · visible sur l’accueil' : 'Salon privé'}
-              {' · Mise démo '}{(room.stake ?? 0).toLocaleString('fr-FR')} crédits
-              {' · Pot démo '}{((room.stake ?? 0) * 2).toLocaleString('fr-FR')} crédits
+              {room.isPublic ? t('lobby.publicVisible') : t('lobby.private')}
+              {' · '}{t('rooms.demoStake')} {formatAmount(room.stake ?? 0)}
+              {' · '}{t('wallet.demo')} {formatAmount((room.stake ?? 0) * 2)}
             </p>
             {outcome && <div className={`arcade-result-score ${outcome}`}>
-              <strong>{outcome === 'is-win' ? 'VICTOIRE !' : outcome === 'is-loss' ? 'DÉFAITE' : 'ÉGALITÉ'}</strong>
+              <strong>{outcome === 'is-win' ? t('lobby.victory') : outcome === 'is-loss' ? t('lobby.defeat') : t('lobby.draw')}</strong>
               <span>{room.gameState?.match?.scores.join(' – ') ?? room.gameState?.scores?.join(' – ') ?? ''}</span>
               <b>{room.payout && winnerSlot === room.yourSlot
-                ? `🪙 +${room.payout.toLocaleString('fr-FR')} crédits démo`
+                ? `🪙 +${formatAmount(room.payout)}`
                 : room.stake ? room.payout ? 'Gain attribué à l’adversaire' : 'Mise remboursée en crédits démo' : ''}</b>
             </div>}
             <div className="arcade-player-list">{[0, 1].map((slot) => {
@@ -333,7 +351,7 @@ export default function ArenaRoom({
               return <div key={slot}><i className={player?.connected ? 'is-connected' : ''} /><span><b>{player?.you ? 'Vous' : player?.name ?? `Joueur ${slot + 1}`}</b><small>{player ? player.connected ? player.ready ? 'Sélection validée · prêt' : 'Connecté' : 'Reconnexion…' : 'En attente…'}</small>{game === 'head-football' && <small>{club && footballer ? `${club} · ${footballer}` : 'Choix du club et du joueur en attente'}</small>}</span></div>
             })}</div>
             {game === 'head-football' && room.phase !== 'finished' && <div className="head-football-selection">
-              <h2>Votre sélection</h2>
+              <h2>{t('lobby.select')}</h2>
               <label className="arcade-field">Club
                 <select value={clubIndex} disabled={Boolean(self?.ready) || room.phase !== 'waiting'} onChange={(event) => setClubIndex(Number(event.target.value))}>
                   {HEAD_FOOTBALL_CLUBS.map(([club], index) => <option key={club} value={index}>{club}</option>)}
@@ -345,21 +363,21 @@ export default function ArenaRoom({
                 </select>
               </label>
               <button type="button" className="arcade-secondary-button" disabled={Boolean(self?.ready) || room.phase !== 'waiting'} onClick={() => perform('arena:head-football:selection', { clubIndex, playerIndex })}>
-                {self?.ready ? 'Sélection verrouillée' : room.gameState?.selections?.[self?.slot ?? 0] ? 'Mettre à jour ma sélection' : 'Valider ma sélection'}
+                {self?.ready ? t('lobby.locked') : room.gameState?.selections?.[self?.slot ?? 0] ? t('lobby.updateSelection') : t('lobby.confirmSelection')}
               </button>
             </div>}
             {room.phase === 'finished' && <p className="arcade-lobby-hint">
               Match terminé · {room.gameState?.match?.scores.join(' – ') ?? room.gameState?.scores?.join(' – ')}
             </p>}
             {countdown !== null
-              ? <p className="arcade-countdown">Début dans <b>{countdown}</b></p>
+              ? <p className="arcade-countdown">{t('lobby.startIn')} <b>{countdown}</b></p>
               : <button type="button" className="arcade-primary-button" disabled={!opponent?.connected || !connected || Boolean(self?.ready) || (game === 'head-football' && !room.gameState?.selections?.[self?.slot ?? 0])} onClick={() => perform(room.phase === 'finished' ? 'arena:room:rematch' : 'arena:room:ready', room.phase === 'finished' ? {} : { ready: true })}>
-                {self?.ready ? 'En attente…' : room.phase === 'finished' ? 'Revanche' : game === 'head-football' ? 'PRÊT' : 'Je suis prêt'}
+                {self?.ready ? t('lobby.waiting') : room.phase === 'finished' ? t('lobby.rematch') : t('lobby.ready')}
               </button>}
-            <p className="arcade-lobby-hint">{opponent?.connected ? 'Les deux joueurs doivent être prêts.' : 'Partagez le code pour inviter un adversaire.'}</p>
+            <p className="arcade-lobby-hint">{opponent?.connected ? t('lobby.playersReady') : t('lobby.shareCode')}</p>
           </>}
           {feedback && <p className="arcade-feedback" role="status">{feedback}</p>}
-          {!connected && !feedback && <p className="arcade-feedback">Connexion au serveur…</p>}
+          {!connected && !feedback && <p className="arcade-feedback">{t('lobby.connecting')}</p>}
         </main>
       </div>
     </div>

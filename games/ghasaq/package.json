@@ -1,0 +1,43 @@
+{
+  "name": "ghasaq",
+  "private": true,
+  "version": "2.2.0",
+  "description": "Ghasaq : un jeu de survie et de tir à la première personne dans votre navigateur. Défendez une forteresse du désert de 16 h à minuit. Réalisé avec Three.js, cannon-es et Vite ; textures, modèles et sons sont générés par le code.",
+  "keywords": [
+    "game",
+    "fps",
+    "first-person-shooter",
+    "browser-game",
+    "threejs",
+    "webgl",
+    "cannon-es",
+    "vite",
+    "web-audio",
+    "procedural",
+    "french",
+    "ltr"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mobile": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "build:single": "node scripts/build-single.mjs",
+    "test": "vite build"
+  },
+  "dependencies": {
+    "cannon-es": "0.20.0",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.7"
+  },
+  "license": "MIT",
+  "author": "Ayman Al-Khatib",
+  "homepage": "https://ghasaq-game.netlify.app/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aymansalkhatib/ghasaq.git"
+  }
+}

@@ -1,18 +1,18 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   BarChart3,
   Bell,
   ChevronRight,
-  CircleDot,
   CreditCard,
-  Dices,
+  Eye,
+  EyeOff,
   Gamepad2,
   Grid2X2,
   HelpCircle,
   Home,
   Leaf,
-  Minus,
   Moon,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -20,7 +20,6 @@ import {
   Sparkles,
   Sun,
   Swords,
-  Trophy,
   User,
   UserPlus,
   Wallet,
@@ -29,11 +28,13 @@ import {
 import type { ArcadeGameId } from './ArcadeOnline'
 import type { PublicRoom } from './PublicRooms'
 import ChicagoWordmark from './ChicagoWordmark'
+import AccountAuthPage from './AccountAuthPage'
 import PublicRooms from './PublicRooms'
+import { getAuthApiBaseUrl } from './multiplayer-url'
 import { getResponsiveImageProps, hideBrokenImage } from './responsive-image'
+import { useLocalization } from './useLocalization'
 import './DesktopLayout.css'
 
-const MosswingOnline = lazy(() => import('./MosswingOnline'))
 const ArcadeOnline = lazy(() => import('./ArcadeOnline'))
 const TicTacToeOnline = lazy(() => import('./TicTacToeOnline'))
 const SimpleIntro = lazy(() => import('./SimpleIntro'))
@@ -44,10 +45,11 @@ const TapTapeArena = lazy(() => import('./TapTapeArena'))
 const ArenaRoom = lazy(() => import('./ArenaRoom'))
 const HeadFootballGame = lazy(() => import('./HeadFootballGame'))
 const SoccerArena = lazy(() => import('./SoccerArena'))
+const QuizArena = lazy(() => import('./QuizArena'))
 
 type ArenaGameId = 'tic-tac-toe' | ArcadeGameId
 type Page = 'popular' | 'games' | 'performance' | 'invite' | 'account'
-type ThemeMode = 'dark' | 'light' | 'lime' | 'neon'
+type ThemeMode = 'dark' | 'light' | 'lime' | 'neon' | 'melbet'
 
 type DuelInvite = {
   id: string
@@ -57,16 +59,61 @@ type DuelInvite = {
   status: 'pending' | 'accepted' | 'refused'
 }
 
+type ChicagoAccount = {
+  id: string
+  name: string
+  country: string
+}
+
 function GameLoadingFallback() {
+  const { t } = useLocalization()
   return (
     <div
       className="grid min-h-screen place-items-center bg-black text-sm font-bold text-slate-400"
       role="status"
       aria-live="polite"
     >
-      Chargement du jeu…
+      {t('game.loading')}
     </div>
   )
+}
+
+const PROFILE_PHOTO_STORAGE_KEY = 'chicago-profile-photo'
+const PROFILE_PHOTO_MAX_BYTES = 8 * 1024 * 1024
+
+function resizeProfilePhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      const canvas = document.createElement('canvas')
+      canvas.width = 256
+      canvas.height = 256
+      const context = canvas.getContext('2d')
+      if (!context) {
+        reject(new Error('Impossible de préparer la photo de profil.'))
+        return
+      }
+
+      const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight)
+      const width = image.naturalWidth * scale
+      const height = image.naturalHeight * scale
+      context.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height)
+
+      try {
+        const webpPhoto = canvas.toDataURL('image/webp', 0.85)
+        resolve(webpPhoto.startsWith('data:image/webp') ? webpPhoto : canvas.toDataURL('image/png'))
+      } catch (error) {
+        reject(error)
+      }
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('Le fichier sélectionné ne peut pas être lu comme une image.'))
+    }
+    image.src = objectUrl
+  })
 }
 
 // Top 10 performers
@@ -74,28 +121,28 @@ const allTopPerformers = [
   {
     rank: 1 as const,
     name: 'Astra Void',
-    amount: '2 740 000 XOF',
+    amount: 2_740_000,
     image: '/images/top-performer-01.jpg',
   },
   {
     rank: 2 as const,
     name: 'Rift Echo',
-    amount: '2 360 000 XOF',
+    amount: 2_360_000,
     image: '/images/top-performer-02.jpg',
   },
   {
     rank: 3 as const,
     name: 'Nova Dream',
-    amount: '1 940 000 XOF',
+    amount: 1_940_000,
     image: '/images/top-performer-03.jpg',
   },
-  { rank: 4, name: 'Ion Pulse', amount: '1 650 000 XOF', image: '/images/top-performer-04.jpg' },
-  { rank: 5, name: 'Comet Rift', amount: '1 420 000 XOF', image: '/images/top-performer-05.jpg' },
-  { rank: 6, name: 'Kite Nova', amount: '1 190 000 XOF', image: '/images/top-performer-06.jpg' },
-  { rank: 7, name: 'Nexa G', amount: '980 000 XOF', image: '/images/top-performer-07.jpg' },
-  { rank: 8, name: 'Luma Fire', amount: '810 000 XOF', image: '/images/top-performer-08.jpg' },
-  { rank: 9, name: 'Pixel S', amount: '690 000 XOF', image: '/images/top-performer-09.jpg' },
-  { rank: 10, name: 'Vortex Max', amount: '580 000 XOF', image: '/images/top-performer-10.jpg' },
+  { rank: 4, name: 'Ion Pulse', amount: 1_650_000, image: '/images/top-performer-04.jpg' },
+  { rank: 5, name: 'Comet Rift', amount: 1_420_000, image: '/images/top-performer-05.jpg' },
+  { rank: 6, name: 'Kite Nova', amount: 1_190_000, image: '/images/top-performer-06.jpg' },
+  { rank: 7, name: 'Nexa G', amount: 980_000, image: '/images/top-performer-07.jpg' },
+  { rank: 8, name: 'Luma Fire', amount: 810_000, image: '/images/top-performer-08.jpg' },
+  { rank: 9, name: 'Pixel S', amount: 690_000, image: '/images/top-performer-09.jpg' },
+  { rank: 10, name: 'Vortex Max', amount: 580_000, image: '/images/top-performer-10.jpg' },
 ]
 
 // List only distinct, playable games so each game appears once in the platform.
@@ -118,6 +165,12 @@ const allGames = [
     title: 'Dictée Éclair',
     image: '/images/dictee-eclair.jpg',
     type: 'dictation' as const,
+  },
+  {
+    id: 'quiz-arena',
+    title: 'Quiz Arène',
+    image: '/images/quiz-arena.jpg',
+    type: 'quizarena' as const,
   },
   {
     id: 'head-football',
@@ -160,10 +213,46 @@ const allGames = [
     arcadeGameId: 'ball-rush' as ArcadeGameId,
   },
   {
-    id: 'mosswing-online',
-    title: 'Mosswing Online',
-    image: '/images/mosswing-online.jpg',
-    type: 'mosswing' as const,
+    id: 'piaf-plume',
+    title: 'Piaf Plume',
+    image: '/images/piaf-plume.svg',
+    type: 'arcade' as const,
+    arcadeGameId: 'piaf-plume' as ArcadeGameId,
+  },
+  {
+    id: 'lave-montante',
+    title: 'Lave Montante',
+    image: '/images/lave-montante.svg',
+    type: 'arcade' as const,
+    arcadeGameId: 'lave-montante' as ArcadeGameId,
+  },
+  {
+    id: 'mirror-run',
+    title: 'Mirror Run',
+    image: '/images/mirror-run.svg',
+    type: 'arcade' as const,
+    arcadeGameId: 'mirror-run' as ArcadeGameId,
+  },
+  {
+    id: 'ghasaq',
+    title: 'Ghasaq — FPS de survie',
+    image: '/images/ghasaq.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'ghasaq' as ArcadeGameId,
+  },
+  {
+    id: 'counter-siege',
+    title: 'Counter Siege',
+    image: '/images/ghasaq.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'counter-siege' as ArcadeGameId,
+  },
+  {
+    id: 'dashbot',
+    title: 'DashBot',
+    image: '/images/duel-de-troncs.jpg',
+    type: 'arcade' as const,
+    arcadeGameId: 'dashbot' as ArcadeGameId,
   },
   {
     id: 'forest-bridge',
@@ -253,11 +342,11 @@ const allGames = [
 
 // Promotional banners use the supplied campaign artwork.
 const promotions = [
-  { title: 'Jackpot machines', image: '/images/casino-slots.jpg', desc: 'Découvrez les machines' },
-  { title: 'Roulette', image: '/images/roulette.jpg', desc: 'Tentez votre chance' },
-  { title: 'Jackpot rose', image: '/images/jackpot-arcade.jpg', desc: 'Une partie, un jackpot' },
-  { title: 'Jackpot royal', image: '/images/royal-slots.jpg', desc: 'Faites tourner les rouleaux' },
-]
+  { title: 'bonus.slots', image: '/images/casino-slots.jpg', desc: 'bonus.slotsDesc' },
+  { title: 'bonus.roulette', image: '/images/roulette.jpg', desc: 'bonus.rouletteDesc' },
+  { title: 'bonus.pinkJackpot', image: '/images/jackpot-arcade.jpg', desc: 'bonus.oneGame' },
+  { title: 'bonus.royalJackpot', image: '/images/royal-slots.jpg', desc: 'bonus.spin' },
+] as const
 
 /* SVG Ribbon Medal Component matching the screenshot badges */
 function MedalRibbon({ rank }: { rank: 1 | 2 | 3 }) {
@@ -295,20 +384,28 @@ function MedalRibbon({ rank }: { rank: 1 | 2 | 3 }) {
 }
 
 export default function App() {
+  const { language, setLanguage, currency, setCurrency, languageNames, t, gameTitle, formatAmount } = useLocalization()
+  const bonusRowRef = useRef<HTMLDivElement>(null)
+  const [bonusCarouselPaused, setBonusCarouselPaused] = useState(false)
+
   // Simple splash intro state
   const [showIntro, setShowIntro] = useState(true)
 
   // Theme state
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = window.localStorage.getItem('game_arena_theme')
-    if (saved === 'light' || saved === 'lime' || saved === 'neon') return saved
-    return 'neon'
+    if (saved === 'light' || saved === 'lime' || saved === 'neon' || saved === 'melbet') return saved
+    return 'light'
   })
 
   const [page, setPage] = useState<Page>('popular')
-  const [category, setCategory] = useState('Populaires')
+  const [authMode, setAuthMode] = useState<'register' | 'login' | null>('register')
+  const [authReady, setAuthReady] = useState(false)
+  const [account, setAccount] = useState<ChicagoAccount | null>(null)
   const [sidebarCompact, setSidebarCompact] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [profilePhoto, setProfilePhoto] = useState(() => window.localStorage.getItem(PROFILE_PHOTO_STORAGE_KEY))
+  const profilePhotoInputRef = useRef<HTMLInputElement>(null)
 
   // Balance and Wallet state
   const [balance, setBalance] = useState(() => {
@@ -323,22 +420,23 @@ export default function App() {
   // Notifications state
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsCount, setNotificationsCount] = useState(2)
+  const [walletBalancesVisible, setWalletBalancesVisible] = useState(true)
 
   // Playable Games
-  const [activeMosswing, setActiveMosswing] = useState(false)
   const [activeArcadeGame, setActiveArcadeGame] = useState<ArenaGameId | null>(null)
   const [activeMemo, setActiveMemo] = useState(false)
   const [activeWordSearch, setActiveWordSearch] = useState(false)
   const [activeDictation, setActiveDictation] = useState(false)
   const [activeTapTape, setActiveTapTape] = useState(false)
   const [activeHeadFootball, setActiveHeadFootball] = useState(false)
+  const [activeQuizArena, setActiveQuizArena] = useState(false)
   const [activeFootball19, setActiveFootball19] = useState(false)
   const [publicRoomJoin, setPublicRoomJoin] = useState<PublicRoom | null>(null)
 
   // Duels state
   const [incomingInvites, setIncomingInvites] = useState<DuelInvite[]>([
     { id: 'inv-1', player: 'Astra Void', game: 'Basketball Stars', stake: 500, status: 'pending' },
-    { id: 'inv-2', player: 'Nova Dream', game: 'Mosswing Online', stake: 1000, status: 'pending' },
+    { id: 'inv-2', player: 'Nova Dream', game: 'Quantum Duel', stake: 1000, status: 'pending' },
   ])
   const [sentInvites, setSentInvites] = useState<DuelInvite[]>([])
   const [invitePlayer, setInvitePlayer] = useState('')
@@ -351,6 +449,41 @@ export default function App() {
   function showToast(msg: string) {
     setToast(msg)
     window.setTimeout(() => setToast(null), 2800)
+  }
+
+  async function handleProfilePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    if (!file) return
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      showToast('Choisissez une image JPEG, PNG ou WebP.')
+      input.value = ''
+      return
+    }
+    if (file.size > PROFILE_PHOTO_MAX_BYTES) {
+      showToast('La photo doit faire 8 Mo maximum.')
+      input.value = ''
+      return
+    }
+
+    try {
+      const photo = await resizeProfilePhoto(file)
+      try {
+        window.localStorage.setItem(PROFILE_PHOTO_STORAGE_KEY, photo)
+      } catch (error) {
+        console.error('Impossible d’enregistrer la photo de profil.', error)
+        showToast('Impossible d’enregistrer cette photo sur cet appareil.')
+        return
+      }
+      setProfilePhoto(photo)
+      showToast('Photo de profil mise à jour.')
+    } catch (error) {
+      console.error('Impossible de traiter la photo de profil.', error)
+      showToast('Impossible de lire cette image. Choisissez un autre fichier.')
+    } finally {
+      input.value = ''
+    }
   }
 
   const updateDemoBalance = useCallback((value: number) => {
@@ -366,8 +499,51 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
+    const controller = new AbortController()
+    fetch(`${getAuthApiBaseUrl()}/api/auth/me`, {
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (response.status === 401) return null
+      if (!response.ok) throw new Error(`Account session check failed (${response.status}).`)
+      const result = await response.json() as { account: ChicagoAccount }
+      return result.account
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) console.warn('Unable to restore the Chicago account session:', error)
+      return null
+    }).then((restoredAccount) => {
+      if (controller.signal.aborted) return
+      if (restoredAccount) {
+        setAccount(restoredAccount)
+        setAuthMode(null)
+        setShowIntro(true)
+      }
+      setAuthReady(true)
+    })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
     window.localStorage.setItem('chicago-demo-balance', String(balance))
   }, [balance])
+
+  useEffect(() => {
+    if (page !== 'popular' || bonusCarouselPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const timer = window.setInterval(() => {
+      const row = bonusRowRef.current
+      const firstCard = row?.querySelector<HTMLElement>('.home-bonus-card')
+      if (!row || !firstCard) return
+
+      const gap = Number.parseFloat(window.getComputedStyle(row).columnGap) || 0
+      const nextPosition = row.scrollLeft + firstCard.offsetWidth + gap
+      const atEnd = nextPosition >= row.scrollWidth - row.clientWidth - 4
+      row.scrollTo({ left: atEnd ? 0 : nextPosition, behavior: 'smooth' })
+    }, 3500)
+
+    return () => window.clearInterval(timer)
+  }, [bonusCarouselPaused, page])
 
   useEffect(() => {
     const revealLoadedImage = (event: Event) => {
@@ -385,7 +561,7 @@ export default function App() {
   }, [])
 
   function toggleTheme() {
-    setTheme((prev) => prev === 'dark' ? 'neon' : prev === 'neon' ? 'light' : prev === 'light' ? 'lime' : 'dark')
+    setTheme((prev) => prev === 'dark' ? 'neon' : prev === 'neon' ? 'light' : prev === 'light' ? 'lime' : prev === 'lime' ? 'melbet' : 'dark')
   }
 
   function handleSendDuel(e: FormEvent) {
@@ -424,6 +600,10 @@ export default function App() {
       setActiveDictation(true)
       return
     }
+    if (game.id === 'quiz-arena') {
+      setActiveQuizArena(true)
+      return
+    }
     if (game.id === 'head-football') {
       setActiveHeadFootball(true)
       return
@@ -432,8 +612,8 @@ export default function App() {
       setActiveTapTape(true)
       return
     }
-    if (game.id === 'mosswing-online') {
-      setActiveMosswing(true)
+    if (game.id === 'ghasaq') {
+      setActiveArcadeGame('ghasaq')
       return
     }
     if (game.id === 'quantum-duel') {
@@ -453,7 +633,9 @@ export default function App() {
     setPublicRoomJoin(room)
     if (room.game === 'tic-tac-toe') {
       setActiveArcadeGame('tic-tac-toe')
-    } else if (['ping-pong', 'basketball-stars', 'ball-rush', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade', 'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes'].includes(room.game)) {
+    } else if (room.game === 'quiz-arena') {
+      setActiveQuizArena(true)
+    } else if (['ping-pong', 'basketball-stars', 'ball-rush', 'forest-bridge', 'damned-maze', 'princess-race', 'grotte-aux-couteaux', 'colonnes-du-canyon', 'arena-helice', 'duel-de-troncs', 'chess-3d', 'embuscade', 'moto-taxi-afrique', 'chemin-de-couleurs', 'duel-de-cartes', 'counter-siege', 'dashbot', 'piaf-plume', 'lave-montante', 'mirror-run'].includes(room.game)) {
       setActiveArcadeGame(room.game as ArcadeGameId)
     } else if (room.game === 'football-19') {
       setActiveFootball19(true)
@@ -467,8 +649,6 @@ export default function App() {
       setActiveHeadFootball(true)
     } else if (room.game === 'tap-tape-arena') {
       setActiveTapTape(true)
-    } else if (room.game === 'mosswing-online') {
-      setActiveMosswing(true)
     }
   }
 
@@ -478,6 +658,29 @@ export default function App() {
       <Suspense fallback={<GameLoadingFallback />}>
         <SimpleIntro onEnter={() => setShowIntro(false)} />
       </Suspense>
+    )
+  }
+
+  if (!authReady) {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-[#fffdf5] px-4 text-slate-800">
+        <p role="status" className="rounded-2xl border border-amber-200 bg-white px-5 py-4 text-sm font-bold shadow-lg shadow-amber-100">
+          Vérification de votre compte…
+        </p>
+      </main>
+    )
+  }
+
+  if (!account || authMode) {
+    return (
+      <AccountAuthPage
+        mode={authMode ?? 'register'}
+        onAuthenticated={(authenticatedAccount) => {
+          setAccount(authenticatedAccount)
+          setAuthMode(null)
+          setShowIntro(true)
+        }}
+      />
     )
   }
 
@@ -495,6 +698,21 @@ export default function App() {
           )}
         />
       </Suspense>
+    )
+  }
+
+  if (activeQuizArena) {
+    return (
+      <ArenaRoom
+        game="quiz-arena"
+        title="Quiz Arène"
+        publicJoin={publicRoomJoin}
+        onWalletBalance={updateDemoBalance}
+        onClose={() => { setActiveQuizArena(false); setPublicRoomJoin(null) }}
+        renderGame={({ room, onClose, onAction }) => (
+          <QuizArena room={room} onClose={onClose} onAction={onAction} />
+        )}
+      />
     )
   }
 
@@ -584,19 +802,6 @@ export default function App() {
     )
   }
 
-  // If Mosswing 3D WebGL is open
-  if (activeMosswing) {
-    return (
-      <Suspense fallback={<GameLoadingFallback />}>
-        <MosswingOnline
-          publicJoin={publicRoomJoin}
-          onWalletBalance={updateDemoBalance}
-          onClose={() => { setActiveMosswing(false); setPublicRoomJoin(null) }}
-        />
-      </Suspense>
-    )
-  }
-
   // If an Arcade duel game is open
   if (activeArcadeGame) {
     if (activeArcadeGame === 'tic-tac-toe') {
@@ -618,24 +823,113 @@ export default function App() {
     )
   }
 
-  const isDark = theme !== 'light'
+  const isDark = theme !== 'light' && theme !== 'melbet'
   const searchTerm = searchQuery.trim().toLocaleLowerCase()
   const matchingGames = searchTerm
     ? allGames.filter((game) => game.title.toLocaleLowerCase().includes(searchTerm)).slice(0, 5)
     : []
   const desktopNavigation: Array<{ page: Page; label: string; icon: typeof Home }> = [
-    { page: 'popular', label: 'Accueil', icon: Home },
-    { page: 'games', label: 'Jeux', icon: Grid2X2 },
-    { page: 'performance', label: 'Classement', icon: BarChart3 },
-    { page: 'invite', label: 'Inviter', icon: UserPlus },
-    { page: 'account', label: 'Mon compte', icon: User },
+    { page: 'popular', label: t('nav.home'), icon: Home },
+    { page: 'games', label: t('nav.games'), icon: Grid2X2 },
+    { page: 'performance', label: t('nav.performance'), icon: BarChart3 },
+    { page: 'invite', label: t('nav.invite'), icon: UserPlus },
+    { page: 'account', label: t('nav.account'), icon: User },
   ]
+  const renderHeaderActions = () => (
+    <div className="desktop-header-actions relative z-10 flex items-center gap-1.5 flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => account ? setPage('account') : setAuthMode('register')}
+        className={`account-entry-button rounded-xl px-2 py-2 text-[10px] font-black transition sm:px-3 sm:text-xs ${
+          isDark ? 'bg-amber-300 text-slate-950 hover:bg-amber-200' : 'bg-purple-600 text-white hover:bg-purple-500'
+        }`}
+        title={account ? `Compte ${account.id}` : 'Créer un compte'}
+      >
+        {account ? 'Compte' : 'Inscription'}
+      </button>
+      <div
+        onClick={() => setWalletModalOpen(true)}
+        title={t('wallet.creditWarning')}
+        className={`flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-2xl cursor-pointer transition-transform active:scale-95 ${
+          isDark ? 'bg-[#161928] border border-white/10 shadow-sm'
+            : 'bg-white border border-slate-100 shadow-sm'
+        }`}
+      >
+        <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center shadow-inner">
+          <span className="text-[9px] font-black text-amber-900">C</span>
+        </div>
+        <span
+          className={`text-xs font-bold leading-none ${balancePulse ? 'demo-balance-pulse' : ''} ${
+            isDark ? 'text-white' : 'text-slate-900'
+          }`}
+        >
+          {formatAmount(balance)}
+        </span>
+        <span
+          className={`w-4 h-4 rounded-md flex items-center justify-center font-bold text-xs ${
+            isDark ? 'bg-[#FBBF24] text-slate-950' : 'bg-[#6B38FB] text-white'
+          }`}
+          aria-hidden="true"
+        >
+          <Plus size={11} strokeWidth={3} />
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setNotificationsOpen(true)}
+        className={`relative w-8 h-8 rounded-xl flex items-center justify-center transition-transform active:scale-95 ${
+          isDark ? 'bg-[#161928] border border-white/10 text-white'
+            : 'bg-white border border-slate-100 text-slate-800 shadow-sm'
+        }`}
+        title={t('account.notifications')}
+        aria-label={`${t('account.notifications')}${notificationsCount > 0 ? ` (${notificationsCount})` : ''}`}
+      >
+        <Bell size={15} />
+        {notificationsCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#EF4444] text-white text-[8.5px] font-black flex items-center justify-center border-2 border-transparent">
+            {notificationsCount}
+          </span>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-95 ${
+          isDark ? 'bg-[#161928] border border-purple-500/40 text-[#FBBF24] hover:bg-purple-950/40'
+            : 'bg-white border border-purple-200 text-[#6B38FB] shadow-sm hover:bg-purple-50'
+        }`}
+        title={`${t('account.theme')} : ${t(theme === 'neon' ? 'theme.neon' : theme === 'lime' ? 'theme.lime' : theme === 'melbet' ? 'theme.melbet' : theme === 'dark' ? 'theme.dark' : 'theme.light')}`}
+        aria-label={t('account.theme')}
+      >
+        {theme === 'neon' ? <Sparkles size={15} /> : theme === 'lime' ? <Leaf size={15} /> : theme === 'melbet' ? <Palette size={15} /> : isDark ? <Sun size={15} /> : <Moon size={15} />}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setPage('account')}
+        className="desktop-profile-button"
+        title={t('nav.account')}
+        aria-label={t('nav.account')}
+      >
+        <img
+          src={profilePhoto || (isDark ? '/images/extracted/avatar-dark.png' : '/images/extracted/avatar-light.png')}
+          alt=""
+          width={32}
+          height={32}
+          onError={hideBrokenImage}
+        />
+      </button>
+    </div>
+  )
 
   return (
     <div
       className={`chicago-world desktop-app-shell ${sidebarCompact ? 'is-sidebar-compact' : ''} relative isolate min-h-screen w-full transition-colors duration-200 overflow-x-clip ${
         theme === 'neon' ? 'bg-[#0c0611] text-white'
           : theme === 'lime' ? 'bg-[#10170b] text-white'
+          : theme === 'melbet' ? 'bg-[#E9EDF3] text-[#1B2433]'
           : isDark ? 'bg-black text-white'
             : 'bg-[#DCEEFF] text-[#0F172A]'
       }`}
@@ -661,7 +955,7 @@ export default function App() {
           <ChicagoWordmark className="desktop-brand-mark" />
           <span className="desktop-brand-copy"><small>ARCADE</small></span>
         </button>
-        <div className="desktop-sidebar-label">MENU PRINCIPAL</div>
+        <div className="desktop-sidebar-label">{t('sidebar.mainMenu')}</div>
         <nav className="desktop-sidebar-nav">
           {desktopNavigation.map(({ page: targetPage, label, icon: Icon }) => (
             <button
@@ -680,30 +974,30 @@ export default function App() {
         <div className="desktop-sidebar-spacer" />
         <div className="desktop-sidebar-promo">
           <Sparkles size={17} />
-          <strong>Prêt à jouer </strong>
-          <span>Découvre les jeux multijoueurs.</span>
-          <button type="button" onClick={() => setPage('games')}>Explorer les jeux</button>
+          <strong>{t('sidebar.ready')}</strong>
+          <span>{t('sidebar.multiplayer')}</span>
+          <button type="button" onClick={() => setPage('games')}>{t('sidebar.explore')}</button>
         </div>
         <button
           type="button"
           className="desktop-sidebar-toggle"
           onClick={() => setSidebarCompact((compact) => !compact)}
-          aria-label={sidebarCompact ? 'Développer le menu' : 'Réduire le menu'}
-          title={sidebarCompact ? 'Développer le menu' : 'Réduire le menu'}
+          aria-label={sidebarCompact ? t('sidebar.expand') : t('sidebar.collapse')}
+          title={sidebarCompact ? t('sidebar.expand') : t('sidebar.collapse')}
         >
           {sidebarCompact ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          <span>Réduire le menu</span>
+          <span>{t('sidebar.collapse')}</span>
         </button>
       </aside>
 
       {/* Main Mobile App Container: 440px max width for authentic mobile frame matching the images */}
-      <div className="desktop-content-shell relative z-10 w-full max-w-[440px] md:max-w-[900px] xl:max-w-[1200px] 2xl:max-w-[1440px] mx-auto min-h-screen flex flex-col pb-28 shadow-2xl">
+      <div className="desktop-content-shell relative z-10 w-full min-h-screen flex flex-col pb-28 shadow-2xl">
         {/* ========================================================
             HEADER BANNER (Minecraft Avatar, Chicago Brand, Balance, Bell, Theme Switcher)
            ======================================================== */}
         <header className="desktop-main-header relative px-4 pt-3 pb-3 flex items-center justify-between overflow-hidden">
           {/* Light Theme Background Floating Grass Block */}
-          {!isDark && (
+          {!isDark && theme !== 'melbet' && (
             <img
               src="/images/extracted/header-grass-light.png"
               alt=""
@@ -719,8 +1013,8 @@ export default function App() {
           <div className="desktop-avatar relative z-10 flex-shrink-0 cursor-pointer" onClick={() => setPage('account')}>
             <div className="relative w-20 h-20 -my-2 flex items-center justify-center">
               <img
-                src={isDark ? '/images/extracted/avatar-dark.png' : '/images/extracted/avatar-light.png'}
-                alt="Minecraft Avatar"
+                src={profilePhoto || (isDark ? '/images/extracted/avatar-dark.png' : '/images/extracted/avatar-light.png')}
+                alt={profilePhoto ? t('profile.photo') : t('profile.player')}
                 className="w-full h-full object-contain filter drop-shadow-md select-none"
                 width={145}
                 height={145}
@@ -738,7 +1032,7 @@ export default function App() {
                 isDark ? 'text-slate-400' : 'text-slate-500'
               }`}
             >
-              Jouez • Gagnez • Profitez
+              {t('intro.caption')}
             </span>
           </div>
 
@@ -751,310 +1045,143 @@ export default function App() {
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && matchingGames.length) handleLaunchGame(matchingGames[0])
               }}
-              placeholder="Rechercher un jeu, une équipe..."
-              aria-label="Rechercher un jeu ou une équipe"
+              placeholder={t('search.placeholder')}
+              aria-label={t('search.placeholder')}
             />
             {searchTerm && (
               <div className="desktop-search-results">
                 {matchingGames.map((game) => (
                   <button type="button" key={game.id} onClick={() => { handleLaunchGame(game); setSearchQuery('') }}>
-                    <Gamepad2 size={16} /><span>{game.title}</span><small>Jeu</small>
+                    <Gamepad2 size={16} /><span>{gameTitle(game.id, game.title)}</span><small>{t('search.game')}</small>
                   </button>
                 ))}
-                {!matchingGames.length && <p>Aucun résultat</p>}
+                {!matchingGames.length && <p>{t('search.none')}</p>}
               </div>
             )}
           </div>
 
-          {/* Right: Balance Pill, Notification Bell & Theme Switch */}
-          <div className="relative z-10 flex items-center gap-1.5 flex-shrink-0">
-            {/* Balance Pill */}
-            <div
-              onClick={() => setWalletModalOpen(true)}
-              title="CrÃ©dits de dÃ©monstration uniquement â€” aucun paiement rÃ©el"
-              className={`flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-2xl cursor-pointer transition-transform active:scale-95 ${
-                isDark ? 'bg-[#161928] border border-white/10 shadow-sm'
-                  : 'bg-white border border-slate-100 shadow-sm'
-              }`}
-            >
-              {/* Gold Coin Icon */}
-              <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center shadow-inner">
-                <span className="text-[9px] font-black text-amber-900">C</span>
-              </div>
-              {/* Balance Amount */}
-              <span
-                className={`text-xs font-bold leading-none ${balancePulse ? 'demo-balance-pulse' : ''} ${
-                  isDark ? 'text-white' : 'text-slate-900'
-                }`}
-              >
-                {balance.toLocaleString('fr-FR')}
-              </span>
-              {/* Plus Button */}
-              <button
-                type="button"
-                className={`w-4 h-4 rounded-md flex items-center justify-center font-bold text-xs transition-colors ${
-                  isDark ? 'bg-[#FBBF24] text-slate-950' : 'bg-[#6B38FB] text-white'
-                }`}
-              >
-                <Plus size={11} strokeWidth={3} />
-              </button>
-            </div>
-
-            {/* Notification Bell */}
-            <button
-              type="button"
-              onClick={() => setNotificationsOpen(true)}
-              className={`relative w-8 h-8 rounded-xl flex items-center justify-center transition-transform active:scale-95 ${
-                isDark ? 'bg-[#161928] border border-white/10 text-white'
-                  : 'bg-white border border-slate-100 text-slate-800 shadow-sm'
-              }`}
-              title="Notifications"
-            >
-              <Bell size={15} />
-              {notificationsCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#EF4444] text-white text-[8.5px] font-black flex items-center justify-center border-2 border-transparent">
-                  {notificationsCount}
-                </span>
-              )}
-            </button>
-
-            {/* Theme Switcher Button */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-95 ${
-                isDark ? 'bg-[#161928] border border-purple-500/40 text-[#FBBF24] hover:bg-purple-950/40'
-                  : 'bg-white border border-purple-200 text-[#6B38FB] shadow-sm hover:bg-purple-50'
-              }`}
-              title={`Thème actuel : ${theme === 'neon' ? 'Violet néon' : theme === 'lime' ? 'Vert citron' : theme === 'dark' ? 'Sombre' : 'Clair'}. Cliquer pour changer`}
-            >
-                  {theme === 'neon' ? <Sparkles size={15} /> : theme === 'lime' ? <Leaf size={15} /> : isDark ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage('account')}
-              className="desktop-profile-button"
-              title="Mon compte"
-              aria-label="Mon compte"
-            >
-              <User size={17} />
-            </button>
-          </div>
+          {page === 'popular'
+            ? <div className="desktop-home-header-actions">{renderHeaderActions()}</div>
+            : renderHeaderActions()}
         </header>
 
         <div className="desktop-page-content">
-        {/* ========================================================
-            CATEGORY HORIZONTAL PILLS (Populaires, Sports, E-sport, Casino, Jeux)
-           ======================================================== */}
-        <div className="desktop-category-bar px-4 py-1.5 flex items-center gap-2 overflow-x-auto no-scrollbar select-none">
-          {[
-            { label: 'Populaires', icon: Trophy },
-            { label: 'Sports', icon: CircleDot },
-            { label: 'E-sport', icon: Gamepad2 },
-            { label: 'Casino', icon: Dices },
-            { label: 'Jeux', icon: Grid2X2 },
-          ].map(({ label, icon: Icon }) => {
-            const isActive = category === label
-            return (
-              <button
-                type="button"
-                key={label}
-                onClick={() => setCategory(label)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 flex-shrink-0 ${
-                  isActive
-                    ? 'bg-[#6B38FB] text-white shadow-md shadow-purple-600/30'
-                    : isDark ? 'bg-[#161928] text-slate-300 border border-white/5 hover:bg-[#1f2338]'
-                      : 'bg-white text-slate-700 border border-slate-100 shadow-sm hover:bg-slate-50'
-                }`}
-              >
-                <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
-                <span>{label}</span>
-              </button>
-            )
-          })}
-        </div>
-
         {/* ========================================================
             MAIN PAGE CONTENT SWITCHER
            ======================================================== */}
         {page === 'popular' && (
           <div className="desktop-page desktop-popular-page flex flex-col gap-4 px-4 pt-2">
-            {/* ----------------------------------------------------
-                PROMOTIONS CAROUSEL (DÃ‰FILEMENT HORIZONTAL)
-               ---------------------------------------------------- */}
-            <div className="promotion-carousel desktop-promotions -mx-4">
-              <div className="promotion-track flex w-max items-stretch gap-3 px-4 select-none">
-                {[...promotions, ...promotions].map((promo, index) => (
-                <div
-                  key={`${promo.title}-${index}`}
-                  onClick={() => showToast(`Promotion ${promo.title} activÃ©e !`)}
-                  className="relative w-[228px] h-[142px] flex-shrink-0 rounded-2xl overflow-hidden cursor-pointer transition-transform active:scale-95 border border-white/10"
-                >
-                  <img
-                    {...getResponsiveImageProps(promo.image, '228px')}
-                    alt={promo.title}
-                    className="absolute inset-0 h-full w-full bg-gradient-to-br from-slate-900 to-indigo-950 object-cover"
-                    width={228}
-                    height={142}
-                    loading={index === 0 ? 'eager' : 'lazy'}
-                    fetchPriority={index === 0 ? 'high' : 'auto'}
-                    decoding="async"
-                    onError={hideBrokenImage}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
-                  <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-                    <div className="text-sm font-extrabold leading-tight">{promo.title}</div>
-                    <div className="text-[11px] text-white/80 font-semibold mt-0.5">{promo.desc}</div>
+            <div className="home-header-actions-row">{renderHeaderActions()}</div>
+
+            <button
+              type="button"
+              onClick={() => showToast(`${t('bonus.activated')} : ${t(promotions[0].title)} !`)}
+              className="home-featured-promo"
+            >
+              <img
+                {...getResponsiveImageProps(promotions[0].image, '900px', [320, 640, 960, 1280])}
+                alt=""
+                width={900}
+                height={360}
+                loading="eager"
+                decoding="async"
+                onError={hideBrokenImage}
+              />
+              <span className="home-featured-promo-copy">
+                <small>{t('bonus.offers')}</small>
+                <strong>{t('home.featuredTitle')}</strong>
+                <span>{t('home.featuredDescription')}</span>
+                <b>{t('home.featuredAction')} <ChevronRight aria-hidden="true" /></b>
+              </span>
+              <span className="home-featured-promo-pagination" aria-hidden="true">
+                <i className="is-active" /><i /><i /><i />
+              </span>
+            </button>
+
+            {Array.from({ length: Math.ceil(allGames.length / 5) }, (_, groupIndex) => allGames.slice(groupIndex * 5, (groupIndex + 1) * 5)).map((games, groupIndex) => (
+              <div key={groupIndex} className="home-content-group">
+                <section className="home-games-group">
+                  <div className="home-games-heading">
+                    <h2>{t('game.group')}</h2>
+                    <span>{groupIndex === 0 ? t('home.popular') : `${t('game.group')} ${groupIndex * 5 + 1}–${groupIndex * 5 + games.length}`}</span>
+                    {groupIndex === 0 && (
+                      <button type="button" onClick={() => setPage('games')}>
+                        {t('home.all')} <ChevronRight aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
-                </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ----------------------------------------------------
-                SECTION 1: TOP 10 DES PERFORMEURS (DÃ‰FILEMENT HORIZONTAL)
-               ---------------------------------------------------- */}
-            <section>
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-4 bg-[#8B5CF6] rounded-full" />
-                  <h2
-                    className={`text-sm font-black tracking-tight ${
-                      isDark ? 'text-white' : 'text-slate-900'
-                    }`}
-                  >
-                    Top 10 des performeurs
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPage('performance')}
-                  className="flex items-center text-xs font-bold text-[#8B5CF6] hover:underline"
-                >
-                  <span>Voir tout</span>
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-
-              {/* Performer Cards Horizontal Scroll Container */}
-              <div
-                className="desktop-performer-grid flex items-stretch gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 select-none"
-                onWheel={(event) => {
-                  if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
-                }}
-              >
-                {allTopPerformers.map((player) => (
-                  <div
-                    key={player.rank}
-                    onClick={() => setPage('performance')}
-                    className={`relative w-[136px] flex-shrink-0 p-2.5 rounded-2xl flex flex-col justify-between cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-95 ${
-                      isDark ? 'bg-[#161928] border border-white/5'
-                        : 'bg-white border border-slate-100 shadow-sm'
-                    }`}
-                  >
-                    {/* Top Left Ribbon Medal Badge (1, 2, 3) or number tag */}
-                    <div className="absolute top-2 left-2 z-10">
-                      {player.rank <= 3 ? (
-                        <MedalRibbon rank={player.rank as 1 | 2 | 3} />
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded-md bg-purple-600/20 text-purple-400 text-[10px] font-black">
-                          #{player.rank}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Voxel 3D Image (Grass block / Diamond / Creeper) */}
-                    <div className="w-full h-20 flex items-center justify-center mt-2 mb-1 overflow-hidden rounded-xl bg-slate-900/10">
-                      <img
-                        {...getResponsiveImageProps(player.image, '176px', [128, 256, 384, 576])}
-                        alt={player.name}
-                        className="performer-photo h-full w-full rounded-xl object-cover object-center select-none"
-                        width={176}
-                        height={128}
-                        loading="lazy"
-                        decoding="async"
-                        onError={hideBrokenImage}
-                      />
-                    </div>
-
-                    {/* Player Name */}
-                    <div
-                      className={`text-center font-bold text-[11px] truncate ${
-                        isDark ? 'text-white' : 'text-slate-900'
-                      }`}
-                    >
-                      {player.name}
-                    </div>
-
-                    {/* Amount */}
-                    <div
-                      className={`text-center font-extrabold text-[10.5px] mt-0.5 mb-2 whitespace-nowrap ${
-                        isDark ? 'text-[#FACC15]' : 'text-[#4F46E5]'
-                      }`}
-                    >
-                      {player.amount}
-                    </div>
-
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* ----------------------------------------------------
-                SECTION 2: LES JEUX (DÃ‰FILEMENT HORIZONTAL)
-               ---------------------------------------------------- */}
-            <section>
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-4 bg-[#8B5CF6] rounded-full" />
-                  <h2
-                    className={`text-sm font-black tracking-tight ${
-                      isDark ? 'text-white' : 'text-slate-900'
-                    }`}
-                  >
-                    Les jeux
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPage('games')}
-                  className="flex items-center text-xs font-bold text-[#8B5CF6] hover:underline"
-                >
-                  <span>Voir tout ({allGames.length})</span>
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-
-              {Array.from({ length: Math.ceil(allGames.length / 5) }, (_, groupIndex) => allGames.slice(groupIndex * 5, (groupIndex + 1) * 5)).map((games, groupIndex) => (
-                <div key={groupIndex} className="home-games-group">
-                  <h3 className="home-games-group-title">Jeux {groupIndex * 5 + 1} à {groupIndex * 5 + games.length}</h3>
                   <div className="home-games-row">
                     {games.map((game) => (
                       <button
                         type="button"
                         key={game.id}
                         onClick={() => handleLaunchGame(game)}
-                        aria-label={`Lancer ${game.title}`}
+                        aria-label={`${t('game.launch')} ${gameTitle(game.id, game.title)}`}
                         className="game-category-tile"
                       >
                         <img
-                          {...getResponsiveImageProps(game.image, '120px', [64, 128, 320, 400, 640])}
+                          {...getResponsiveImageProps(game.image, '320px', [128, 320, 400, 640])}
                           alt=""
                           className="sports-category-image"
-                          width={120}
+                          width={320}
                           height={198}
                           loading="lazy"
                           decoding="async"
                           onError={hideBrokenImage}
                         />
-                        <span className="sports-category-label">{game.title}</span>
-                        <span className="sports-category-status">Jeu disponible</span>
+                        <span className="sports-category-label">{gameTitle(game.id, game.title)}</span>
                       </button>
                     ))}
                   </div>
-                </div>
-              ))}
-            </section>
+                </section>
+                {groupIndex === 0 && (
+                  <section className="home-games-group home-bonuses">
+                    <div className="home-games-heading">
+                      <h2>{t('bonus.title')}</h2>
+                      <span>{t('bonus.offers')}</span>
+                    </div>
+                    <div
+                      className="home-bonus-row"
+                      ref={bonusRowRef}
+                      aria-label={t('bonus.title')}
+                      onMouseEnter={() => setBonusCarouselPaused(true)}
+                      onMouseLeave={() => setBonusCarouselPaused(false)}
+                      onFocusCapture={() => setBonusCarouselPaused(true)}
+                      onBlurCapture={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                          setBonusCarouselPaused(false)
+                        }
+                      }}
+                      onTouchStart={() => setBonusCarouselPaused(true)}
+                      onTouchEnd={() => window.setTimeout(() => setBonusCarouselPaused(false), 3500)}
+                    >
+                      {promotions.map((promo, index) => (
+                        <button
+                          type="button"
+                          key={promo.title}
+                          onClick={() => showToast(`${t('bonus.activated')} : ${t(promo.title)} !`)}
+                          className="home-bonus-card"
+                        >
+                          <img
+                            {...getResponsiveImageProps(promo.image, '420px', [128, 320, 400, 640])}
+                            alt=""
+                            width={420}
+                            height={220}
+                            loading={index === 0 ? 'eager' : 'lazy'}
+                            decoding="async"
+                            onError={hideBrokenImage}
+                          />
+                          <span className="home-bonus-copy">
+                            <strong>{t(promo.title)}</strong>
+                            <small>{t(promo.desc)}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            ))}
 
             <PublicRooms onJoin={joinPublicRoom} onWalletBalance={updateDemoBalance} />
           </div>
@@ -1068,38 +1195,41 @@ export default function App() {
                 onClick={() => setPage('popular')}
                 className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-[#8B5CF6]"
               >
-                â† Retour
+                ← {t('game.back')}
               </button>
-              <span className="text-xs font-bold text-slate-400">{allGames.length} jeux</span>
+              <span className="text-xs font-bold text-slate-400">{allGames.length} {t('game.gamesCount')}</span>
             </div>
-            <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Tous les jeux</h1>
+            <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('game.all')}</h1>
             <div
               className="desktop-games-catalog no-scrollbar flex flex-col gap-4"
             >
               {Array.from({ length: Math.ceil(allGames.length / 5) }, (_, groupIndex) => allGames.slice(groupIndex * 5, (groupIndex + 1) * 5)).map((games, groupIndex) => (
-                <div key={groupIndex} className="home-games-row">
-                  {games.map((game) => (
-                    <button
-                      type="button"
-                      key={game.id}
-                      onClick={() => handleLaunchGame(game)}
-                      aria-label={`Lancer ${game.title}`}
-                      className="game-category-tile"
-                    >
-                      <img
-                        {...getResponsiveImageProps(game.image, '152px', [64, 128, 320, 400, 640])}
-                        alt=""
-                        className="sports-category-image"
-                        width={152}
-                        height={208}
-                        loading="lazy"
-                        decoding="async"
-                        onError={hideBrokenImage}
-                      />
-                      <span className="sports-category-label">{game.title}</span>
-                      <span className="sports-category-status">Jeu disponible</span>
-                    </button>
-                  ))}
+                <div key={groupIndex} className="home-games-group">
+                  <h3 className="home-games-group-title">{t('game.group')} {groupIndex * 5 + 1}–{groupIndex * 5 + games.length}</h3>
+                  <div className={`home-games-row${games.length < 5 ? ' is-partial' : ''}`}>
+                    {games.map((game) => (
+                      <button
+                        type="button"
+                        key={game.id}
+                        onClick={() => handleLaunchGame(game)}
+                        aria-label={`${t('game.launch')} ${gameTitle(game.id, game.title)}`}
+                        className="game-category-tile"
+                      >
+                        <img
+                          {...getResponsiveImageProps(game.image, '152px', [64, 128, 320, 400, 640])}
+                          alt=""
+                          className="sports-category-image"
+                          width={152}
+                          height={208}
+                          loading="lazy"
+                          decoding="async"
+                          onError={hideBrokenImage}
+                        />
+                        <span className="sports-category-label">{gameTitle(game.id, game.title)}</span>
+                        <span className="sports-category-status">{t('game.available')}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1114,7 +1244,7 @@ export default function App() {
             <div className="flex items-center gap-2 mb-1">
               <span className="w-1.5 h-5 bg-[#8B5CF6] rounded-full" />
               <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Classement & Performances
+                {t('performance.title')}
               </h1>
             </div>
 
@@ -1125,14 +1255,14 @@ export default function App() {
               }`}
             >
               <div>
-                <span className="text-xs text-slate-400 font-semibold">Gains cumulÃ©s</span>
+                <span className="text-xs text-slate-400 font-semibold">{t('performance.earnings')}</span>
                 <div className={`text-xl font-black ${isDark ? 'text-[#FACC15]' : 'text-[#6B38FB]'}`}>
-                  +2 450 000 XOF
+                  {formatAmount(2_450_000)}
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-xs text-slate-400 font-semibold">Votre rang</span>
-                <div className="text-base font-bold text-emerald-500">Top 12 mondial</div>
+                <span className="text-xs text-slate-400 font-semibold">{t('performance.rank')}</span>
+                <div className="text-base font-bold text-emerald-500">{t('performance.globalTop12')}</div>
               </div>
             </div>
 
@@ -1142,8 +1272,8 @@ export default function App() {
                 isDark ? 'bg-[#161928] border border-white/5' : 'bg-white shadow-sm border border-slate-100'
               }`}
             >
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                Top 10 des performeurs mondiaux
+              <h3 className="performer-leaderboard-heading text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                {t('performance.top10')}
               </h3>
 
               {allTopPerformers.map((p) => (
@@ -1172,7 +1302,7 @@ export default function App() {
                     <span className="font-bold text-xs">{p.name}</span>
                   </div>
                   <span className={`font-black text-xs ${isDark ? 'text-[#FACC15]' : 'text-[#4F46E5]'}`}>
-                    {p.amount}
+                    {formatAmount(p.amount)}
                   </span>
                 </div>
               ))}
@@ -1188,7 +1318,7 @@ export default function App() {
             <div className="flex items-center gap-2 mb-1">
               <span className="w-1.5 h-5 bg-[#8B5CF6] rounded-full" />
               <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                DÃ©fis & Invitations 1v1
+                {t('invite.title')}
               </h1>
             </div>
 
@@ -1200,16 +1330,16 @@ export default function App() {
               }`}
             >
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Lancer un dÃ©fi
+                {t('invite.launch')}
               </span>
 
               <div>
                 <label className="text-xs text-slate-400 font-semibold block mb-1">
-                  Pseudo du joueur
+                  {t('invite.player')}
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Nova Dream, Rift Echo..."
+                  placeholder={t('invite.playerExample')}
                   value={invitePlayer}
                   onChange={(e) => setInvitePlayer(e.target.value)}
                   className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border ${
@@ -1221,7 +1351,7 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-slate-400 font-semibold block mb-1">Jeu</label>
+                  <label className="text-xs text-slate-400 font-semibold block mb-1">{t('invite.game')}</label>
                   <select
                     value={selectedInviteGame}
                     onChange={(e) => setSelectedInviteGame(e.target.value)}
@@ -1232,14 +1362,14 @@ export default function App() {
                   >
                     {allGames.map((game) => (
                       <option key={game.id} value={game.title}>
-                        {game.title}
+                        {gameTitle(game.id, game.title)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs text-slate-400 font-semibold block mb-1">Mise (XOF)</label>
+                  <label className="text-xs text-slate-400 font-semibold block mb-1">{t('invite.stake')}</label>
                   <input
                     type="number"
                     value={inviteStake}
@@ -1257,7 +1387,7 @@ export default function App() {
                 className="w-full py-2.5 rounded-xl font-bold text-xs bg-[#6B38FB] text-white shadow-md shadow-purple-600/30 hover:bg-[#5B2AE8] active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 <Swords size={14} />
-                <span>Envoyer le dÃ©fi</span>
+                <span>{t('button.sendChallenge')}</span>
               </button>
             </form>
 
@@ -1268,7 +1398,7 @@ export default function App() {
               }`}
             >
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                DÃ©fis reÃ§us en attente ({incomingInvites.filter((i) => i.status === 'pending').length})
+                {t('invite.incoming')} ({incomingInvites.filter((i) => i.status === 'pending').length})
               </span>
               {incomingInvites
                 .filter((i) => i.status === 'pending')
@@ -1298,7 +1428,7 @@ export default function App() {
                         }}
                         className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700"
                       >
-                        Accepter
+                        {t('button.accept')}
                       </button>
                       <button
                         type="button"
@@ -1310,7 +1440,7 @@ export default function App() {
                         }}
                         className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-red-600/80 text-white hover:bg-red-700"
                       >
-                        Refuser
+                        {t('button.decline')}
                       </button>
                     </div>
                   </div>
@@ -1325,7 +1455,7 @@ export default function App() {
                 }`}
               >
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  DÃ©fis envoyÃ©s ({sentInvites.length})
+                  {t('invite.sent')} ({sentInvites.length})
                 </span>
                 {sentInvites.map((inv) => (
                   <div
@@ -1335,13 +1465,13 @@ export default function App() {
                     }`}
                   >
                     <div>
-                      <div className="font-bold text-xs">Ã€: {inv.player}</div>
+                      <div className="font-bold text-xs">{t('invite.to')} {inv.player}</div>
                       <div className="text-[10px] text-slate-400">
                         {inv.game} â€¢ {inv.stake} XOF
                       </div>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">
-                      En attente
+                      {t('invite.pending')}
                     </span>
                   </div>
                 ))}
@@ -1355,10 +1485,10 @@ export default function App() {
            ======================================================== */}
         {page === 'account' && (
           <div className="desktop-page account-page flex flex-col gap-4 px-4 pt-2">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="account-page-heading flex items-center gap-2 mb-1">
               <span className="w-1.5 h-5 bg-[#8B5CF6] rounded-full" />
               <h1 className={`text-base font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Mon Compte & Soldes
+                {t('account.title')}
               </h1>
             </div>
 
@@ -1366,11 +1496,11 @@ export default function App() {
             <div className={`account-profile flex items-center gap-3 rounded-2xl p-4 ${
               isDark ? 'bg-[#161928] border border-white/5' : 'bg-white shadow-sm border border-slate-100'
             }`}>
-              <div className="w-12 h-12 rounded-2xl overflow-hidden bg-purple-600/20 flex items-center justify-center p-1 border border-purple-500/30">
+              <div className="account-profile-avatar w-12 h-12 rounded-full overflow-hidden bg-purple-600/20 flex items-center justify-center border border-purple-500/30">
                 <img
-                  src={isDark ? '/images/extracted/avatar-dark.png' : '/images/extracted/avatar-light.png'}
-                  alt="Player"
-                  className="w-full h-full object-contain"
+                  src={profilePhoto || (isDark ? '/images/extracted/avatar-dark.png' : '/images/extracted/avatar-light.png')}
+                  alt={profilePhoto ? t('profile.photo') : t('profile.player')}
+                  className="w-full h-full object-cover"
                   width={145}
                   height={145}
                   loading="lazy"
@@ -1378,43 +1508,87 @@ export default function App() {
                   onError={hideBrokenImage}
                 />
               </div>
-              <div>
-                <h3 className="font-black text-sm">Champion Player</h3>
-                <span className="text-[10px] text-purple-500 font-bold">ID: #GA-89214 â€¢ Rang VIP Platine</span>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-black text-sm">{account?.name ?? 'Compte démo'}</h3>
+                <span className="block truncate text-[10px] text-purple-500 font-bold">
+                  {account ? `ID : ${account.id} · ${account.country}` : 'Connectez-vous pour retrouver votre compte'}
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={() => profilePhotoInputRef.current?.click()}
+                className="account-photo-button flex shrink-0 items-center gap-1.5 rounded-xl border border-purple-500/30 px-2 py-2 text-[10px] font-bold text-purple-400 hover:bg-purple-500/10"
+              >
+                <User size={14} />
+                <span>{t('account.photo')}</span>
+              </button>
+              <input
+                ref={profilePhotoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                aria-label={t('account.choosePhoto')}
+                className="sr-only"
+                onChange={(event) => void handleProfilePhotoChange(event)}
+              />
+              {account && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`${getAuthApiBaseUrl()}/api/auth/session`, {
+                        method: 'DELETE',
+                        credentials: 'include',
+                      })
+                      if (!response.ok) throw new Error(`Logout failed (${response.status}).`)
+                      setAccount(null)
+                      setAuthMode('register')
+                      setShowIntro(false)
+                      showToast('Vous êtes déconnecté.')
+                    } catch (error) {
+                      console.error('Unable to sign out of the Chicago account:', error)
+                      showToast('Impossible de fermer la session. Réessayez.')
+                    }
+                  }}
+                  className="account-logout-button flex shrink-0 items-center justify-center rounded-xl border border-red-500/30 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-500/10"
+                >
+                  Déconnexion
+                </button>
+              )}
             </div>
 
             {/* Soldes du compte */}
             <div className="account-balances">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mes soldes</span>
-              <div className="account-balance-grid mt-3 grid gap-3">
-                <div className="account-balance-card account-balance-primary flex items-center justify-between p-3 rounded-2xl bg-sky-400/10 border border-sky-400/25">
-                  <span className={`text-sm font-bold ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
-                    Solde du compte
-                  </span>
-                  <span className={`text-sm font-black ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
-                    {balance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} XOF
-                  </span>
-                </div>
-                <div className="account-balance-card flex items-center justify-between p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
-                  <div className="flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-full bg-red-500/15 text-red-500 flex items-center justify-center">
-                      <Minus size={18} strokeWidth={3} />
-                    </span>
-                    <span className="text-sm font-bold text-red-500">Retrait</span>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">{t('account.wallet')}</span>
+                <span className="text-[10px] font-semibold text-slate-500">{t('account.demoBalances')}</span>
+              </div>
+              <div className="account-wallet-scene">
+                <section className="account-wallet-pocket" aria-label={t('wallet.main')}>
+                  <div className="account-wallet-pocket-label">
+                    <Wallet size={16} />
+                    <span>{t('account.wallet')}</span>
                   </div>
-                  <span className="text-sm font-black text-red-500">
-                    âˆ’{withdrawalBalance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} XOF
+                  <div className="account-wallet-balance-row">
+                    <strong>
+                      {walletBalancesVisible
+                          ? formatAmount(balance)
+                        : '••••••••'}
+                    </strong>
+                    <button
+                      type="button"
+                      className="account-wallet-visibility"
+                      onClick={() => setWalletBalancesVisible((visible) => !visible)}
+                      aria-label={walletBalancesVisible ? t('account.hideBalance') : t('account.showBalance')}
+                      aria-pressed={walletBalancesVisible}
+                      title={walletBalancesVisible ? t('account.hideBalance') : t('account.showBalance')}
+                    >
+                      {walletBalancesVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+                    </button>
+                  </div>
+                  <span className="account-wallet-footnote">
+                    {walletBalancesVisible ? t('account.tapToHide') : t('account.tapToShow')}
                   </span>
-                </div>
-                <div className="account-balance-card flex items-center justify-between p-3 rounded-2xl bg-lime-400/10 border border-lime-400/25">
-                  <span className={`text-sm font-bold ${isDark ? 'text-lime-400' : 'text-lime-700'}`}>
-                    Solde bonus
-                  </span>
-                  <span className={`text-sm font-black ${isDark ? 'text-lime-400' : 'text-lime-700'}`}>
-                    {bonusBalance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} XOF
-                  </span>
-                </div>
+                </section>
               </div>
             </div>
 
@@ -1426,7 +1600,7 @@ export default function App() {
                 className="py-3 px-4 rounded-2xl bg-[#6B38FB] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 hover:bg-[#5B2AE8] active:scale-95 transition-all"
               >
                 <Plus size={16} />
-                <span>Recharger solde</span>
+                <span>{t('account.deposit')}</span>
               </button>
               <button
                 type="button"
@@ -1437,9 +1611,42 @@ export default function App() {
                 }`}
               >
                 <CreditCard size={16} />
-                <span>Retirer</span>
+                <span>{t('account.withdraw')}</span>
               </button>
             </div>
+
+            <section className="account-wallet-assets" aria-label={t('account.wallet')}>
+              <div className="account-wallet-assets-heading">
+                <h2>{t('wallet.balance')}</h2>
+                <span>{t('wallet.demo')}</span>
+              </div>
+              <div className="account-wallet-cards">
+                <article className="account-wallet-card account-wallet-card-withdrawal">
+                  <span className="account-wallet-card-icon"><CreditCard size={17} /></span>
+                  <span className="account-wallet-card-copy">
+                    <strong>{t('account.withdrawal')}</strong>
+                    <small>{t('account.availableWithdrawal')}</small>
+                  </span>
+                  <span className="account-wallet-card-amount">
+                    {walletBalancesVisible
+                      ? formatAmount(withdrawalBalance)
+                      : '••••••••'}
+                  </span>
+                </article>
+                <article className="account-wallet-card account-wallet-card-bonus">
+                  <span className="account-wallet-card-icon"><Sparkles size={17} /></span>
+                  <span className="account-wallet-card-copy">
+                    <strong>{t('account.bonusBalance')}</strong>
+                    <small>{t('account.bonusAvailable')}</small>
+                  </span>
+                  <span className="account-wallet-card-amount">
+                    {walletBalancesVisible
+                      ? formatAmount(bonusBalance)
+                      : '••••••••'}
+                  </span>
+                </article>
+              </div>
+            </section>
 
             {/* Settings & Extra Options */}
             <div
@@ -1448,6 +1655,50 @@ export default function App() {
                   : 'bg-white shadow-sm border border-slate-100 divide-slate-100'
               }`}
             >
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-[11px] font-bold">
+                  <span>{t('language.label')}</span>
+                  <select
+                    value={language}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      if (value === 'en' || value === 'fr' || value === 'ar' || value === 'es' || value === 'de' || value === 'zh') {
+                        setLanguage(value)
+                      }
+                    }}
+                    className={`w-full rounded-xl border px-3 py-2 text-xs ${
+                      isDark ? 'border-slate-700 bg-[#0B0D19] text-white' : 'border-slate-200 bg-slate-50 text-slate-900'
+                    }`}
+                  >
+                    {Object.entries(languageNames).map(([code, name]) => (
+                      <option key={code} value={code}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-[11px] font-bold">
+                  <span>{t('wallet.currency')}</span>
+                  <select
+                    value={currency}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      if (value === 'XOF' || value === 'USD' || value === 'NGN' || value === 'EUR' || value === 'GBP') {
+                        setCurrency(value)
+                      }
+                    }}
+                    className={`w-full rounded-xl border px-3 py-2 text-xs ${
+                      isDark ? 'border-slate-700 bg-[#0B0D19] text-white' : 'border-slate-200 bg-slate-50 text-slate-900'
+                    }`}
+                  >
+                    <option value="XOF">XOF — {t('currency.fcfa')}</option>
+                    <option value="USD">USD — {t('currency.dollar')}</option>
+                    <option value="NGN">NGN — {t('currency.naira')}</option>
+                    <option value="EUR">EUR — {t('currency.euro')}</option>
+                    <option value="GBP">GBP — {t('currency.pound')}</option>
+                  </select>
+                  <span className="text-[10px] font-normal text-slate-500">{t('wallet.currencyNote')}</span>
+                </label>
+                <span className="text-[10px] font-normal text-slate-500 sm:col-span-2">{t('language.savedLocally')}</span>
+              </div>
               <button
                 type="button"
                 onClick={toggleTheme}
@@ -1455,19 +1706,21 @@ export default function App() {
               >
                 <div className="flex items-center gap-2">
                   {theme === 'neon' ? (
-                    <Sparkles size={16} className="text-pink-400" />
+                    <Sparkles size={16} className="text-amber-300" />
                   ) : theme === 'lime' ? (
                     <Leaf size={16} className="text-lime-400" />
+                  ) : theme === 'melbet' ? (
+                    <Palette size={16} className="text-amber-500" />
                   ) : isDark ? (
                     <Sun size={16} className="text-[#FBBF24]" />
                   ) : (
                     <Moon size={16} className="text-[#6B38FB]" />
                   )}
                   <span>
-                    ThÃ¨me : {theme === 'neon' ? 'Violet néon' : theme === 'lime' ? 'Vert citron' : theme === 'dark' ? 'Sombre' : 'Clair'}
+                    {t('account.theme')} : {t(theme === 'neon' ? 'theme.neon' : theme === 'lime' ? 'theme.lime' : theme === 'melbet' ? 'theme.melbet' : theme === 'dark' ? 'theme.dark' : 'theme.light')}
                   </span>
                 </div>
-                <span className="text-[10px] text-purple-500">Basculer</span>
+                <span className="text-[10px] text-purple-500">{t('account.toggle')}</span>
               </button>
 
               <button
@@ -1477,7 +1730,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} className="text-amber-400" />
-                  <span>Revoir l&apos;intro Chicago</span>
+                  <span>{t('account.replayIntro')}</span>
                 </div>
                 <ChevronRight size={14} className="text-slate-400" />
               </button>
@@ -1489,7 +1742,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-2">
                   <Bell size={16} className="text-purple-500" />
-                  <span>Notifications</span>
+                  <span>{t('account.notifications')}</span>
                 </div>
                 <span className="text-[10px] bg-red-500 text-white font-bold px-1.5 py-0.5 rounded-full">
                   {notificationsCount}
@@ -1503,7 +1756,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-2">
                   <HelpCircle size={16} className="text-blue-500" />
-                  <span>Aide et Support</span>
+                  <span>{t('account.support')}</span>
                 </div>
                 <ChevronRight size={14} className="text-slate-400" />
               </button>
@@ -1537,7 +1790,7 @@ export default function App() {
                 page === 'popular' ? 'text-[#8B5CF6]' : isDark ? 'text-slate-400' : 'text-slate-500'
               }`}
             >
-              Accueil
+              {t('nav.home')}
             </span>
             {page === 'popular' && (
               <span className="w-6 h-0.5 bg-[#8B5CF6] rounded-full absolute -bottom-0.5" />
@@ -1561,7 +1814,7 @@ export default function App() {
                 page === 'performance' ? 'text-[#8B5CF6]' : isDark ? 'text-slate-400' : 'text-slate-500'
               }`}
             >
-              Performances
+              {t('nav.performance')}
             </span>
           </button>
 
@@ -1582,7 +1835,7 @@ export default function App() {
                 page === 'invite' ? 'text-[#8B5CF6]' : isDark ? 'text-slate-400' : 'text-slate-500'
               }`}
             >
-              Inviter
+              {t('nav.invite')}
             </span>
           </button>
 
@@ -1603,7 +1856,7 @@ export default function App() {
                 page === 'account' ? 'text-[#8B5CF6]' : isDark ? 'text-slate-400' : 'text-slate-500'
               }`}
             >
-              Compte
+              {t('nav.account')}
             </span>
           </button>
         </nav>
@@ -1622,7 +1875,7 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wallet size={18} className="text-purple-500" />
-                  <h3 className="font-black text-sm">Crédits de démonstration</h3>
+                  <h3 className="font-black text-sm">{t('wallet.rechargeTitle')}</h3>
                 </div>
                 <button
                   type="button"
@@ -1634,18 +1887,18 @@ export default function App() {
               </div>
 
               <div className={`rounded-2xl p-6 text-center ${isDark ? 'bg-[#0B0D19]' : 'bg-slate-50'}`}>
-                <strong className="block text-4xl font-black">{balance.toLocaleString('fr-FR')}</strong>
-                <span className="mt-1 block text-sm text-slate-400">crédits de démonstration</span>
+                <strong className="block text-4xl font-black">{formatAmount(balance)}</strong>
+                <span className="mt-1 block text-sm text-slate-400">{t('wallet.credits')}</span>
               </div>
               <p className="text-xs leading-relaxed text-slate-400">
-                Ces crédits fictifs servent uniquement aux parties. Aucun dépôt, retrait ou paiement réel n’est possible.
+                {t('wallet.rechargeInfo')}
               </p>
               <button
                 type="button"
                 onClick={() => setWalletModalOpen(false)}
                 className="w-full py-3 rounded-xl font-bold text-xs bg-[#6B38FB] text-white shadow-lg shadow-purple-600/30 hover:bg-[#5B2AE8] active:scale-95 transition-all mt-1"
               >
-                Fermer
+                {t('button.close')}
               </button>
             </div>
           </div>
@@ -1664,7 +1917,7 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Bell size={18} className="text-purple-500" />
-                  <h3 className="font-black text-sm">Notifications ({notificationsCount})</h3>
+                  <h3 className="font-black text-sm">{t('account.notifications')} ({notificationsCount})</h3>
                 </div>
                 <button
                   type="button"
@@ -1682,11 +1935,11 @@ export default function App() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-purple-500">Bonus de Bienvenue</span>
-                    <span className="text-[10px] text-slate-400">Il y a 5 min</span>
+                    <span className="font-bold text-xs text-purple-500">{t('notification.welcome')}</span>
+                    <span className="text-[10px] text-slate-400">{t('notification.time5')}</span>
                   </div>
                   <p className="text-xs text-slate-300">
-                    CrÃ©dits de dÃ©monstration uniquement. Aucun dÃ©pÃ´t, retrait ou paiement rÃ©el nâ€™est effectuÃ©.
+                    {t('notification.safe')}
                   </p>
                 </div>
 
@@ -1696,11 +1949,11 @@ export default function App() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-amber-500">Nouveau DÃ©fi ReÃ§u</span>
-                    <span className="text-[10px] text-slate-400">Il y a 20 min</span>
+                    <span className="font-bold text-xs text-amber-500">{t('notification.newChallenge')}</span>
+                    <span className="text-[10px] text-slate-400">{t('notification.time20')}</span>
                   </div>
                   <p className="text-xs text-slate-300">
-                    Astra Void vous a invitÃ© pour un duel Basketball Stars (Mise : 500 XOF).
+                    {t('notification.challengeText')}
                   </p>
                 </div>
               </div>
@@ -1710,11 +1963,11 @@ export default function App() {
                 onClick={() => {
                   setNotificationsCount(0)
                   setNotificationsOpen(false)
-                  showToast('Toutes les notifications ont Ã©tÃ© marquÃ©es comme lues.')
+                  showToast(t('notification.markedRead'))
                 }}
                 className="w-full py-2.5 rounded-xl font-bold text-xs bg-slate-500/20 hover:bg-slate-500/30 text-slate-300 active:scale-95 transition-all mt-1"
               >
-                Tout marquer comme lu
+                {t('button.markRead')}
               </button>
             </div>
           </div>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 420">
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1">
+      <stop stop-color="#170b0a"/>
+      <stop offset="1" stop-color="#40140e"/>
+    </linearGradient>
+    <linearGradient id="lava" x2="0" y2="1">
+      <stop stop-color="#ffbf59"/>
+      <stop offset="1" stop-color="#f63b15"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="420" rx="32" fill="url(#bg)"/>
+  <circle cx="180" cy="270" r="132" fill="#ff5a1f" opacity=".1"/>
+  <path d="M0 324 84 289l51 13 48-38 49 23 57-50 71 19v164H0z" fill="url(#lava)"/>
+  <g fill="#2c2424" stroke="#67544a" stroke-width="4">
+    <path d="M31 255h85v16H31zM209 197h102v16H209zM81 135h86v16H81z"/>
+  </g>
+  <g fill="#46d2ff" stroke="#d7f8ff" stroke-width="3">
+    <circle cx="75" cy="232" r="18"/><path d="m65 254-9 42h40l-9-42z"/>
+  </g>
+  <g fill="#ff62d6" stroke="#ffe0f5" stroke-width="3">
+    <circle cx="260" cy="173" r="18"/><path d="m250 195-9 42h40l-9-42z"/>
+  </g>
+  <path d="M180 93v52m-18-18 18 18 18-18" fill="none" stroke="#ffb24a" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+  <text x="180" y="370" fill="#fff1df" font-family="system-ui,sans-serif" font-size="29" font-weight="800" text-anchor="middle">LAVE MONTANTE</text>
+</svg>

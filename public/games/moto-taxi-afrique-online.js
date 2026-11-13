@@ -44,6 +44,21 @@
     }
   }
 
+  function clearPlayerInputs(playerSlot) {
+    const input = IN[playerSlot]
+    if (!input) return
+    for (const action of actions) {
+      input[action === 'gas' ? 'g' : action === 'brake' ? 'b' : action === 'horn' ? 'h' : action === 'left' ? 'l' : 'r'] = 0
+      if (playerSlot === slot) held.get(action).clear()
+    }
+  }
+
+  window.motoTaxiReportViolation = (reason, distance) => {
+    if (online && reason === 'collision' && Number.isFinite(distance)) {
+      send({ action: 'violation', reason, distance })
+    }
+  }
+
   const pointerActions = [['bl', 'left'], ['br', 'right'], ['bg', 'gas'], ['bb', 'brake'], ['bh', 'horn']]
   for (const [id, action] of pointerActions) {
     const button = document.getElementById(id)
@@ -103,7 +118,9 @@
 
     if (message.type === `${gameId}:enable`) {
       online = true
+      window.motoTaxiOnline = true
       slot = message.slot === 1 ? 1 : 0
+      window.motoTaxiSlot = slot
       pausedOnline = false
       done = false
       clearInputs()
@@ -138,11 +155,21 @@
       if (!state || !Array.isArray(state.players) || state.players.length !== 2) return
       state.players.forEach((player, index) => {
         if (!hs[index] || !Number.isFinite(player.distance) || !Number.isFinite(player.speed) || !Number.isFinite(player.lane)) return
-        hs[index].s = player.distance
-        hs[index].v = player.speed
-        hs[index].l = player.lane
+        hs[index].serverTarget = { s: player.distance, v: player.speed, l: player.lane }
         hs[index].fin = player.finishedAt === null ? 0 : player.finishedAt
-        hs[index].o.position.set(cx(player.distance) + player.lane, 0, -player.distance)
+        const penalty = Number.isFinite(player.penaltyRemaining) ? Math.max(0, player.penaltyRemaining) : 0
+        if (penalty > 0) {
+          clearPlayerInputs(index)
+          hs[index].stun = penalty
+          hs[index].why = typeof player.penaltyReason === 'string' ? player.penaltyReason : ''
+          if (!hs[index].pol) police(hs[index])
+        } else if (hs[index].pol) {
+          sc.remove(hs[index].pol)
+          hs[index].pol = 0
+          hs[index].stun = 0
+          hs[index].inv = 2.5
+          hs[index].why = ''
+        }
       })
       if (state.status === 'finished' && !done) {
         done = true

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quiz Arène</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{height:100%;margin:0;background:#050b2e;color:#fff;font-family:"Trebuchet MS","Arial Rounded MT Bold",system-ui,sans-serif;font-weight:800;overflow:hidden}
+#app{position:relative;max-width:520px;height:100%;margin:0 auto;display:flex;flex-direction:column;padding:6px 14px 10px;overflow-y:auto}
+#top{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;height:42px;flex:0 0 auto}
+.rb{width:48px;height:40px;border-radius:22px;border:3px solid #1b46d6;background:linear-gradient(#4a8cff,#1f4fe0);color:#fff;font-size:22px;font-weight:900}
+.q{width:40px;height:40px;border-radius:50%;border:3px solid #f5a300;background:#ffd21a;color:#fff;font-size:24px;font-weight:900}
+#hp{position:relative;background:#fdf1d6;border:4px solid #f5b400;border-radius:16px;color:#2a1f6b;padding:2px 22px 2px 12px;font-size:22px;display:flex;gap:10px;align-items:center}
+#hp b{position:absolute;right:-8px;top:-10px;background:#e8213a;color:#fff;border-radius:9px;width:22px;height:22px;font-size:14px;display:grid;place-items:center}
+#card{margin-top:30px;position:relative;z-index:1;flex:1 0 auto;min-height:200px;background:#fdf6ec;border:9px solid #1b5cf0;border-radius:38px;box-shadow:0 8px 0 #1237b8;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 16px 40px;color:#1c1a6b;text-align:center}
+#tab{position:absolute;top:-26px;left:9%;right:9%;background:linear-gradient(#ffb21a,#f28a00);border-radius:18px;height:38px;border:3px solid #f5b400;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;text-shadow:0 2px 0 #b36a00}#big{font-size:clamp(46px,13vw,66px);font-weight:900;line-height:1;color:#2fbf4a;margin-bottom:6px;text-shadow:0 5px 0 #d8d0bf}
+#qt{font-size:clamp(19px,5.4vw,27px);line-height:1.2;font-weight:900}
+#tm{position:absolute;left:24px;right:24px;top:16px;height:12px;background:#e6dcc8;border-radius:4px;overflow:hidden}
+#tm i{display:block;height:100%;width:100%;background:#2fbf4a}
+#dots{position:absolute;left:0;right:0;bottom:12px;display:flex;justify-content:center;gap:5px}
+#dots i{width:12px;height:12px;border-radius:50%;background:#d8d5d0;box-shadow:inset 0 -2px 2px #aaa}
+#dots i.n{background:#f28a00}#dots i.g{background:#2fbf4a}#dots i.r{background:#e8213a}
+#cat{position:absolute;top:22px;right:16px;font-size:11px;color:#8a7a50}
+#ans{z-index:1;margin-top:8px;display:grid;gap:7px}
+.a{height:clamp(46px,7dvh,56px);border-radius:34px;border:4px solid #1b46d6;background:linear-gradient(#5b97ff,#2656e8 60%,#1d46c8);box-shadow:0 5px 0 #14308f;color:#fff;font:inherit;font-size:clamp(16px,4.6vw,23px);display:flex;align-items:center;gap:12px;padding:0 20px;text-align:left}
+.a span{color:#ffd400;font-size:1.25em;font-weight:900}
+.a.sel{background:linear-gradient(#ffd24a,#f28a00);border-color:#b36a00;box-shadow:0 5px 0 #7a4600}
+.tgs{margin-left:auto;display:flex;align-items:center;height:auto;gap:6px;text-decoration:none}.tg{font-style:normal;font-size:12px;line-height:1.1;padding:4px 9px;border-radius:10px;color:#fff;align-self:center;display:inline-block}.tg.y{background:#ffd400;color:#1c1a6b}.tg.ad{background:#8b3dff}
+#vs{z-index:1;display:flex;gap:10px;margin-top:8px;flex:0 0 auto}#vs div{flex:1;border-radius:16px;padding:5px 6px;font-size:clamp(16px,4.6vw,21px);text-align:center;border:3px solid rgba(255,255,255,.35)}#vs .m{background:#ffd400;color:#1c1a6b}#vs .o{background:#8b3dff;color:#fff}
+.a.ok{background:linear-gradient(#5be07a,#1f9d3c);border-color:#17843a}
+.a.ko{background:linear-gradient(#ff7a7a,#d3202f);border-color:#a5121f}
+.a.off{opacity:.12;pointer-events:none}
+#jk{z-index:1;display:flex;justify-content:center;align-items:center;gap:26px;margin-top:8px;padding:0 6px}
+.j{width:clamp(54px,16vw,72px);aspect-ratio:1;border-radius:50%;border:5px solid #f5a300;background:radial-gradient(circle at 35% 30%,#6aa4ff,#1f4fe0);color:#fff;font-size:28px;font-weight:900;box-shadow:0 4px 0 #b36a00}
+#j1{width:clamp(66px,19vw,80px);font-size:34px;position:relative}#jn{position:absolute;right:-8px;top:-10px;min-width:28px;height:28px;border-radius:14px;background:#e8213a;border:3px solid #fff;font-size:17px;display:grid;place-items:center}#j4{width:46px;font-size:21px}.j.u{filter:grayscale(1) brightness(.6);pointer-events:none}
+#ov{position:absolute;inset:0;z-index:9;background:rgba(5,11,46,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;gap:14px}
+#ov h1{font-size:42px;margin:0;color:#ffd400;text-shadow:0 4px 0 #b36a00}
+#ov p{margin:0;font-size:16px;line-height:1.35;max-width:340px}
+.go{border:4px solid #17843a;background:linear-gradient(#5be07a,#1f9d3c);color:#fff;font:inherit;font-size:24px;border-radius:36px;padding:12px 44px;box-shadow:0 5px 0 #0f5f27}
+</style></head><body>
+<div id="app">
+<div id="top"><button class="rb" id="bk">←</button><div id="hp"><span id="lv">Vous 0 · Adv. 0</span></div><button class="q" id="vc">🔊</button></div>
+<div id="card"><div id="tab"></div><div id="tm"><i></i></div><div id="cat"></div><div id="big">15</div><div id="qt"></div><div id="dots"></div></div>
+<div id="vs"></div>
+<div id="ans"></div>
+<div id="jk"><button class="j" id="j1">⚡<b id="jn">3</b></button><button class="j" id="j4">↻</button></div>
+<div id="ov"><h1>QUIZ ARÈNE</h1><p id="ovt"></p><button class="go" id="go">Jouer</button></div>
+</div>
+<script>
+const R=n=>Math.floor(Math.random()*n),pick=a=>a[R(a.length)],sh=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=R(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+const fmt=n=>n.toLocaleString("fr-FR"),$=id=>document.getElementById(id);
+function nw(c){const s=new Set(),sw=+String(c).split("").reverse().join("");if(sw!==c&&c>=10)s.add(sw);
+ for(const x of sh([1,-1,2,-2,10,-10,100,-100,5,-5,11,-9,c>30?Math.round(c*.1):3,c>30?-Math.round(c*.1):-3])){const v=c+x;if(v>=0&&v!==c)s.add(v)}
+ return [...s].slice(0,3)}
+const mk=(q,c,cat)=>({q,c:fmt(c),w:nw(c).map(fmt),cat});
+// ---- Générateurs numériques (plus d’1 million de combinaisons)
+const GN=[l=>{const a=11+R(50+l*3),b=3+R(10+l);return mk(`Combien font ${a} × ${b} ?`,a*b,"Calcul")},
+ l=>{const a=100+R(900),b=100+R(900);return mk(`Combien font ${a} + ${b} ?`,a+b,"Calcul")},
+ l=>{const a=500+R(500),b=100+R(400);return mk(`Combien font ${a} − ${b} ?`,a-b,"Calcul")},
+ l=>{const p=pick([5,10,15,20,25,30,40,60,75,80,90]),N=20*(1+R(100));return mk(`Combien font ${p} % de ${fmt(N)} ?`,p*N/100,"Pourcentage")},
+ l=>{const s=1+R(60),d=2+R(28);return mk(`Suite : ${s}, ${s+d}, ${s+2*d}, ${s+3*d}, … ?`,s+4*d,"Logique")},
+ l=>{const s=2+R(5),r=2+R(3);return mk(`Suite : ${s}, ${s*r}, ${s*r*r}, ${s*r**3}, … ?`,s*r**4,"Logique")},
+ l=>{const n=2+R(998);return mk(`Combien de secondes dans ${fmt(n)} minutes ?`,n*60,"Conversion")},
+ l=>{const n=11+R(89);return mk(`Quelle est la racine carrée de ${fmt(n*n)} ?`,n,"Calcul")}];
+const NUMSPACE=60*13*11+900*900+500*400+11*100*1+60*28+4*3*1+998+89;
+// ---- Données
+const CAP=[["France","Paris"],["Australie","Canberra"],["Canada","Ottawa"],["Brésil","Brasilia"],["Turquie","Ankara"],["Suisse","Berne"],["Maroc","Rabat"],["Nigeria","Abuja"],["Côte d’Ivoire","Yamoussoukro"],["Cameroun","Yaoundé"],["Inde","New Delhi"],["Chine","Pékin"],["Afrique du Sud","Pretoria"],["Nouvelle-Zélande","Wellington"],["Kazakhstan","Astana"],["Bolivie","Sucre"],["Pays-Bas","Amsterdam"],["Tanzanie","Dodoma"],["Vietnam","Hanoï"],["Égypte","Le Caire"],["Sénégal","Dakar"],["Japon","Tokyo"]];
+const DEC=["Sydney","Istanbul","Rio de Janeiro","Zurich","Casablanca","Lagos","Douala","Mumbai","Shanghai","Johannesburg","Genève","New York","Toronto","Auckland","Abidjan","Almaty","La Paz"];
+const EL=[["H","Hydrogène"],["Au","Or"],["Ag","Argent"],["Fe","Fer"],["Na","Sodium"],["K","Potassium"],["Pb","Plomb"],["Sn","Étain"],["Hg","Mercure"],["W","Tungstène"],["Cu","Cuivre"],["Sb","Antimoine"],["Zn","Zinc"],["Ne","Néon"]];
+const BK=[["Germinal","Zola"],["Le Rouge et le Noir","Stendhal"],["L’Étranger","Camus"],["Les Fleurs du mal","Baudelaire"],["Madame Bovary","Flaubert"],["Le Petit Prince","Saint-Exupéry"],["Les Trois Mousquetaires","Dumas"],["Candide","Voltaire"],["Notre-Dame de Paris","Victor Hugo"],["Le Père Goriot","Balzac"],["Les Liaisons dangereuses","Laclos"],["Cyrano de Bergerac","Rostand"]];
+const HQ=[["Que signifie QI ?","Quotient intellectuel","Question intelligente","Rapidité d’interaction","Qualité importante"],
+["Quel est le plus grand désert du monde ?","L’Antarctique","Le Sahara","Le Gobi","Le désert d’Arabie"],
+["Combien de cœurs possède une pieuvre ?","3","1","2","8"],
+["Quelle est la planète la plus chaude du système solaire ?","Vénus","Mercure","Mars","Jupiter"],
+["Quel est le plus petit os du corps humain ?","L’étrier","Le marteau","L’enclume","Le coccyx"],
+["En quelle année est tombé le mur de Berlin ?","1989","1991","1987","1990"],
+["Qui a peint « La Nuit étoilée » ?","Van Gogh","Monet","Munch","Gauguin"],
+["Quel pays compte le plus de fuseaux horaires ?","La France","La Russie","Les États-Unis","La Chine"],
+["Quel est le plus long fleuve d’Europe ?","La Volga","Le Danube","Le Rhin","La Seine"],
+["Combien de dents possède un adulte (dents de sagesse comprises) ?","32","28","30","36"],
+["Quel est le plus grand océan ?","Le Pacifique","L’Atlantique","L’océan Indien","L’Arctique"],
+["Quelle est la vitesse de la lumière dans le vide ?","300 000 km/s","150 000 km/s","30 000 km/s","3 000 000 km/s"],
+["Combien d’os compte le squelette d’un adulte ?","206","212","198","300"],
+["Quel métal est liquide à température ambiante ?","Le mercure","L’étain","Le zinc","L’argent"],
+["Quel est le seul mammifère capable de voler ?","La chauve-souris","L’écureuil volant","Le pétauriste","Le lémurien"],
+["Qui a découvert la pénicilline ?","Fleming","Pasteur","Koch","Curie"],
+["Quel est le plus petit pays du monde ?","Le Vatican","Monaco","Saint-Marin","Le Liechtenstein"],
+["Quelle langue compte le plus de locuteurs natifs ?","Le mandarin","L’anglais","L’espagnol","L’hindi"],
+["En quelle année a eu lieu la Révolution française ?","1789","1792","1799","1778"],
+["Un fermier a 17 moutons. Tous sauf 9 meurent. Combien en reste-t-il ?","9","8","17","0"],
+["Combien de mois de l’année ont 28 jours ?","12","1","2","0"],
+["Un médecin donne 3 pilules à prendre toutes les 30 minutes. Combien de temps durera le traitement ?","1 heure","1 h 30","30 minutes","3 heures"],
+["Quelle est la capitale de la Suisse ?","Berne","Zurich","Genève","Lausanne"],
+["Quel animal est le plus rapide en vol piqué ?","Le faucon pèlerin","L’aigle royal","Le martinet","Le colibri"]];
+const KN=[()=>{const [p,v]=pick(CAP);const w=sh([...DEC,...CAP.map(x=>x[1])].filter(x=>x!==v)).slice(0,3);return{q:`Quelle est la capitale du pays « ${p} » ?`,c:v,w,cat:"Géographie"}},
+()=>{const [p,v]=pick(CAP);return{q:`${v} est la capitale de quel pays ?`,c:p,w:sh(CAP.map(x=>x[0]).filter(x=>x!==p)).slice(0,3),cat:"Géographie"}},
+()=>{const [s,n]=pick(EL);return Math.random()<.5?{q:`Quel est le symbole chimique de l’élément « ${n} » ?`,c:s,w:sh(EL.map(x=>x[0]).filter(x=>x!==s)).slice(0,3),cat:"Sciences"}:{q:`Quel élément a pour symbole « ${s} » ?`,c:n,w:sh(EL.map(x=>x[1]).filter(x=>x!==n)).slice(0,3),cat:"Sciences"}},
+()=>{const [b,a]=pick(BK);return{q:`Qui a écrit « ${b} » ?`,c:a,w:sh(BK.map(x=>x[1]).filter(x=>x!==a)).slice(0,3),cat:"Littérature"}},
+()=>{const h=pick(HQ);return{q:h[0],c:h[1],w:h.slice(2),cat:"Culture piège"}},()=>{const h=pick(HQ);return{q:h[0],c:h[1],w:h.slice(2),cat:"Culture piège"}}];
+const ART=[["Qui a chanté « Billie Jean » ?","Michael Jackson","Prince","Stevie Wonder","Lionel Richie"],["Qui a peint « Les Demoiselles d’Avignon » ?","Picasso","Matisse","Braque","Dalí"],["Qui est l’interprète de « Alors on danse » ?","Stromae","Gims","Soprano","Orelsan"],["Quel groupe a sorti l’album « Abbey Road » ?","Les Beatles","Les Rolling Stones","Pink Floyd","Queen"],["Qui a composé « Les Quatre Saisons » ?","Vivaldi","Bach","Mozart","Haendel"],["Quelle chanteuse était surnommée « la Môme » ?","Édith Piaf","Barbara","Dalida","Juliette Gréco"],["Qui a sculpté « Le Penseur » ?","Rodin","Camille Claudel","Michel-Ange","Giacometti"],["Quel rappeur a sorti « The Marshall Mathers LP » ?","Eminem","Jay-Z","Dr. Dre","50 Cent"],["Quelle chanteuse a sorti l’album « 21 » ?","Adele","Rihanna","Beyoncé","Lady Gaga"],["Qui a réalisé « Titanic » (1997) ?","James Cameron","Steven Spielberg","Ridley Scott","Christopher Nolan"],["Qui a peint « Impression, soleil levant » ?","Monet","Renoir","Manet","Degas"],["Qui chantait « Bohemian Rhapsody » ?","Freddie Mercury","Brian May","Roger Daltrey","Robert Plant"],["Quelle chanteuse est née Stefani Germanotta ?","Lady Gaga","Katy Perry","Pink","Lorde"],["Quel chanteur est surnommé « le King » ?","Elvis Presley","Michael Jackson","Johnny Hallyday","Chuck Berry"],["Quel est le pays d’origine du chanteur Burna Boy ?","Nigeria","Ghana","Afrique du Sud","Kenya"],["Qui a chanté « Waka Waka » (Coupe du monde 2010) ?","Shakira","Beyoncé","Jennifer Lopez","Rihanna"],["Qui a peint « Guernica » ?","Picasso","Dalí","Miró","Goya"],["Qui a composé l’« Ode à la joie » (9e symphonie) ?","Beethoven","Mozart","Schubert","Brahms"],["Qui a chanté « Gangnam Style » ?","Psy","BTS","G-Dragon","Rain"]];
+const ACT=[["Quel pays a remporté la Coupe du monde 2026 ?","L’Espagne","L’Argentine","La France","Le Maroc"],["Quelle équipe a perdu la finale de la Coupe du monde 2026 ?","L’Argentine","La France","L’Angleterre","Le Maroc"],["Combien d’équipes disputaient la Coupe du monde 2026 ?","48","32","40","64"],["Dans quel stade s’est jouée la finale du Mondial 2026 ?","MetLife Stadium","Rose Bowl","SoFi Stadium","Estadio Azteca"],["Quels pays ont organisé ensemble la Coupe du monde 2026 ?","Canada, États-Unis et Mexique","États-Unis et Mexique","Canada et États-Unis","Mexique, Colombie et Brésil"],["Quel jour s’est jouée la finale du Mondial 2026 ?","Le 19 juillet","Le 12 juillet","Le 26 juillet","Le 5 juillet"],["Quel pays africain a atteint les quarts de la Coupe du monde 2026 pour la 2e fois de suite ?","Le Maroc","Le Sénégal","Le Nigeria","L’Égypte"],["Quelle entreprise a lancé les modèles d’IA Claude Fable et Mythos en juin 2026 ?","Anthropic","OpenAI","Google DeepMind","Mistral AI"]];
+KN.push(()=>{const h=pick(ART);return{q:h[0],c:h[1],w:h.slice(2),cat:"Artistes"}},()=>{const h=pick(ART);return{q:h[0],c:h[1],w:h.slice(2),cat:"Artistes"}},()=>{const h=pick(ACT);return{q:h[0],c:h[1],w:h.slice(2),cat:"Actualité"}},()=>{const h=pick(ACT);return{q:h[0],c:h[1],w:h.slice(2),cat:"Actualité"}});
+// ---- État
+let st={},used=new Set(),voice=true,speaking=false,busy=true;
+function nextQ(){for(let k=0;k<60;k++){const o=Math.random()<.55?pick(KN)():pick(GN)(st.i||0);if(!used.has(o.q)){used.add(o.q);return o}}return pick(GN)(0)}
+function say(){}
+let AC;function sw(a,b,d,ty="sine",v=.15){if(!voice)return;try{AC=AC||new AudioContext();const o=AC.createOscillator(),g=AC.createGain(),t=AC.currentTime;o.type=ty;o.frequency.setValueAtTime(a,t);o.frequency.exponentialRampToValueAtTime(b,t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(t+d)}catch(e){}}
+const SFX={ok(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.18,"triangle",.18),i*70))},ko(){sw(300,80,.6,"sawtooth",.2)},jk(){sw(300,1500,.35,"square",.1);setTimeout(()=>sw(1500,600,.2,"sine",.12),200)},tick(){tone(1000,.05,"square",.06)},clk(){tone(700,.04,"square",.08)},nq(){sw(200,600,.12,"sine",.06)},go(){[392,523,659].forEach((f,i)=>setTimeout(()=>tone(f,.15,"triangle",.15),i*110))},win(){[523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tone(f,.25,"triangle",.18),i*120))},lose(){[400,330,260,200].forEach((f,i)=>setTimeout(()=>tone(f,.3,"sawtooth",.15),i*180))}};
+function tone(f,d,ty="sine",v=.15){if(!voice)return;try{AC=AC||new AudioContext();const o=AC.createOscillator(),g=AC.createGain();o.type=ty;o.frequency.value=f;g.gain.value=v;g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
+function dots(){$("dots").innerHTML=Array.from({length:15},(_,k)=>`<i class="${st.res[k]||(k===st.i?"n":"")}"></i>`).join("")}
+function score(){$("lv").textContent=`Vous ${st.me} · Adv. ${st.ad}`}
+function newGame(){SFX.go();st={i:0,me:0,ad:0,j:3,res:[],tm:null};used.clear();$("ov").style.display="none";$("j1").classList.remove("u");$("jn").textContent=3;score();show()}
+function mark(){const L="ABCD";[...document.querySelectorAll(".a")].forEach((b,k)=>{b.classList.toggle("sel",k===st.pc&&!st.rv);b.querySelector(".tgs").innerHTML=(k===st.pc?'<em class="tg y">VOUS</em>':"")+(k===st.oc?'<em class="tg ad">ADV.</em>':"")});const r=c=>st.rv?(st.o[c]===st.q.c?" ✔":" ✘"):"";$("vs").innerHTML=`<div class="m">Vous : ${st.pc>=0?L[st.pc]+r(st.pc):"?"}</div><div class="o">Adverse : ${st.oc>=0?L[st.oc]+r(st.oc):"réfléchit…"}</div>`}
+function pk(k){if(busy)return;st.pc=k;SFX.clk();mark()}
+function show(){SFX.nq();st.q=nextQ();const o=sh([st.q.c,...st.q.w]);st.o=o;busy=false;st.rv=0;st.pc=-1;st.oc=-1;$("qt").textContent=st.q.q;$("tab").textContent=st.q.cat+" · "+(st.i+1)+"/15";
+ $("ans").innerHTML=o.map((t,k)=>`<button class="a" data-k="${k}"><span>${"ABCD"[k]}:</span>${t}<u class="tgs"></u></button>`).join("");
+ [...document.querySelectorAll(".a")].forEach(b=>b.onclick=()=>pk(+b.dataset.k));dots();mark();
+ const ci=o.indexOf(st.q.c),oT=1.5+Math.random()*10,oc=Math.random()<.55+st.i*.01?ci:pick([0,1,2,3].filter(x=>x!==ci));
+ clearInterval(st.tm);const t0=performance.now();st.lb=0;$("big").textContent=15;
+ st.tm=setInterval(()=>{const e=(performance.now()-t0)/1000;st.t=Math.max(0,15-e);if(st.oc<0&&e>=oT){st.oc=oc;SFX.clk();mark()}const lo=st.t<=5,c=Math.ceil(st.t);$("tm").firstChild.style.width=st.t/15*100+"%";$("tm").firstChild.style.background=lo?"#e8213a":"#2fbf4a";$("big").style.color=lo?"#e8213a":"#2fbf4a";$("big").textContent=c;if(c!==st.lb&&c>0){st.lb=c;lo?tone(900,.1,"square",.1):SFX.tick()}if(st.t<=0){clearInterval(st.tm);reveal()}},50)}
+function reveal(){busy=true;st.rv=1;clearInterval(st.tm);const bs=[...document.querySelectorAll(".a")],ci=st.o.indexOf(st.q.c);bs.forEach(b=>b.classList.remove("off"));bs[ci].classList.add("ok");[st.pc,st.oc].forEach(x=>{if(x>=0&&x!==ci)bs[x].classList.add("ko")});
+ const a=st.pc===ci,b=st.oc===ci;if(a)st.me+=100;if(b)st.ad+=100;st.res[st.i]=a?"g":"r";score();mark();$("tm").firstChild.style.width="0%";$("big").textContent=a?"✔":"✘";$("big").style.color=a?"#2fbf4a":"#e8213a";a?SFX.ok():SFX.ko();dots();
+ setTimeout(()=>{st.i++;if(st.i>=15)end();else show()},2400)}
+function end(){const w=st.me>st.ad,e=st.me===st.ad;w?SFX.win():SFX.lose();$("ov").style.display="flex";$("ov").querySelector("h1").textContent=w?"VICTOIRE !":e?"ÉGALITÉ":"DÉFAITE";$("ovt").textContent=`Vous : ${st.me} points · Adversaire : ${st.ad} points`;$("go").textContent="Rejouer"}
+function joker(){if(busy||st.j<1)return;const bs=[...document.querySelectorAll(".a")],ci=st.o.indexOf(st.q.c),w=sh([0,1,2,3].filter(x=>x!==ci&&!bs[x].classList.contains("off")));if(w.length<2)return;st.j--;$("jn").textContent=st.j;if(!st.j)$("j1").classList.add("u");SFX.jk();w.slice(0,2).forEach(x=>bs[x].classList.add("off"));if(st.pc>=0&&bs[st.pc].classList.contains("off"))st.pc=-1;mark()}
+$("j1").onclick=joker;$("j4").onclick=()=>{clearInterval(st.tm);newGame()};
+$("go").onclick=newGame;$("bk").onclick=()=>{clearInterval(st.tm);parent.postMessage({type:"quiz-arena:close"},location.origin)};
+$("vc").onclick=()=>{voice=!voice;$("vc").textContent=voice?"🔊":"🔇"};
+$("ovt").textContent=`Plus de 50 000 questions uniques (≈ ${fmt(NUMSPACE)} combinaisons de calcul, logique, géographie, sciences, artistes, actualité, culture piège). Duel contre un adversaire : 15 s par question, révélation à la fin du chrono, 3 jokers (−2 choix).`;
+st.res=[];dots();
+</script></body></html>

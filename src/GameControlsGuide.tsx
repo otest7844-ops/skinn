@@ -1,6 +1,10 @@
 import './ArcadeOnline.css'
 
 const controls: Record<string, { keyboard: string[]; touch: string }> = {
+  ghasaq: {
+    keyboard: ['W/A/S/D ou Z/Q/S/D : se déplacer; souris : viser et tirer', 'Espace : sauter; Maj : courir; R : recharger', '1/2 : changer d’arme; V : couteau; E : interagir'],
+    touch: 'Joystick gauche pour avancer; glissez à droite pour viser et utilisez les boutons de tir et de rechargement.',
+  },
   'ping-pong': {
     keyboard: ['Souris : déplacer la raquette', 'Clic : servir'],
     touch: 'Glissez sur le terrain pour déplacer la raquette; touchez pour servir.',
@@ -41,6 +45,18 @@ const controls: Record<string, { keyboard: string[]; touch: string }> = {
     keyboard: ['J1 : A/D pour bouger, W ou Espace pour sauter', 'J2 : ←/→ pour bouger, ↑ pour sauter'],
     touch: 'Touchez les commandes de déplacement et d’action affichées à l’écran.',
   },
+  'piaf-plume': {
+    keyboard: ['Espace, ↑ ou W : battre des ailes', 'Atteignez le nid et ramassez des pièces avant votre adversaire.'],
+    touch: 'Touchez le jeu pour battre des ailes; comparez votre progression avec celle de votre adversaire.',
+  },
+  'lave-montante': {
+    keyboard: ['W/A/S/D ou Z/Q/S/D : grimper', 'Espace : sauter; Maj : jetpack'],
+    touch: 'Utilisez les commandes du jeu pour grimper, sauter et éviter la lave.',
+  },
+  'mirror-run': {
+    keyboard: ['ZQSD/WASD ou flèches : bouger', 'Espace : sauter; Maj : sprinter; C : descendre; T : vision thermique'],
+    touch: 'Utilisez les commandes tactiles pour ramasser les pièces et progresser.',
+  },
   'chess-3d': {
     keyboard: ['Touchez ou cliquez une pièce puis sa case de destination.', 'Rouges jouent les premiers; les tours alternent.'],
     touch: 'Touchez une pièce puis sa case de destination pour la déplacer.',
@@ -72,6 +88,10 @@ const controls: Record<string, { keyboard: string[]; touch: string }> = {
   'dictation-duel': {
     keyboard: ['Saisissez la phrase au clavier puis validez.'],
     touch: 'Touchez le champ de texte pour saisir la phrase.',
+  },
+  'quiz-arena': {
+    keyboard: ['Cliquez sur une réponse avant la fin du compte à rebours.', 'Utilisez un joker 50/50 pour éliminer deux choix.'],
+    touch: 'Touchez une réponse avant la fin du compte à rebours; le joker 50/50 élimine deux choix.',
   },
   'head-football': {
     keyboard: ['J1 : A/D pour courir, W pour sauter, F pour tirer, G pour tirer fort', 'J2 : ←/→ pour courir, ↑ pour sauter, Entrée pour tirer, Maj pour tirer fort'],
